@@ -3,3 +3,13 @@
 *.blend3
 *.blend4
 *.blend5
+
+*.mov
+*.wav
+
+*.ardour.bak
+*.history.bak
+
+*.srt
+*.ssml
+*.xcf
