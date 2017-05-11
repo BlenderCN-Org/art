@@ -15,3 +15,5 @@
 *.xcf
 
 music/checkpoints
+music/exports
+music/animation.json
