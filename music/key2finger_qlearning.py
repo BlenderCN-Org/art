@@ -1,4 +1,3 @@
-#import gym
 import json
 import re
 import numpy as np
@@ -6,7 +5,6 @@ import random as rd
 import tensorflow as tf
 
 
-#%matplotlib inline
 import matplotlib.pyplot as plt
 
 from collections import deque
@@ -16,18 +14,17 @@ from collections import deque
 
 
 def open_midi(midigram_filepath):
-    # On (MIDI pulse units)
-    # Off (MIDI pulse units)
-    # Track number
-    # Channel number
-    # Midi pitch -> 60 -> c4 / 61 -> c#4
-    # Midi velocity
-    # 1926 = 4.01 sec
-    # 480.299 x sec
-    # 16 x frame (30fps)
+    ## Midigram collumns
+    # 1: On (MIDI pulse units)
+    # 2: Off (MIDI pulse units)
+    # 3: Track number
+    # 4: Channel number
+    # 5: Midi pitch -> 60 -> c4 / 61 -> c#4
+    # 6: Midi velocity
+
     midi_pulse_per_second  = 480.299
     fps = 30
-    fps = 11.7
+    fps = 11.7 #TODO
     margin = 1
     keyboard_size = 88
     max_frames = 10000
@@ -74,8 +71,6 @@ def open_midi(midigram_filepath):
         music.append(notes)
 
     for mf in midi_frames:
-        #print (midi_frames[mf])
-        #print (midi_frames[mf]['ontime'])
         for mf_note in midi_frames[mf]:
             # Normalize pitch on the keyboard
             mf_normalized_pitch = mf_note['pitch']-lower_pitch
@@ -84,26 +79,7 @@ def open_midi(midigram_filepath):
                 continue
             # Fill ontime to offtime values
             for f in range(mf_note['ontime'], mf_note['offtime']):
-                #music[f][mf_normalized_pitch] = ((f-mf_note['ontime']) / (mf_note['offtime']-mf_note['ontime']) * 0.5) + 0.5
                 music[f][mf_normalized_pitch] = 1.0
-            # Search previous offtime
-            previous_offtime = 0
-            for mf_back in midi_frames:
-                #if mf_back == mf:
-                #    break
-                for mf_back_note in midi_frames[mf_back]:
-                    if mf_back_note['pitch'] == mf_note['pitch']:
-                        if mf_back_note['offtime'] <= mf_note['ontime'] and mf_back_note['offtime'] > previous_offtime:
-                            previous_offtime = mf_back_note['offtime']
-            # Fill previous_offtime to ontime values
-            #if mf_note['pitch'] == 64:
-            #    print ("Previous offtime {} for ontime {} ({}) note {}".format(previous_offtime, mf_note['ontime'], mf_note['offtime'], mf_note['pitch']))
-            #if previous_offtime != mf_note['ontime']:
-            #    for f in range(previous_offtime, mf_note['ontime']):
-            #        music[f][mf_normalized_pitch] = (f-previous_offtime) / (mf_note['ontime']-previous_offtime+1) * 0.5
-
-            #ontime == offtime
-            #offtime == ontime
 
     notes = [0 for _ in range(0, keyboard_size)]
     music = [notes for _ in range(0, margin)] + music + [notes for _ in range(0, margin)]
@@ -119,31 +95,25 @@ class ActionSpace():
 
 
 class PianoEnv:
-    def __init__(self, name):
+    def __init__(self, name, midigram_filepath):
         self.env_name = name
         self.action_space = ActionSpace()
-        #frames_per_second = 60
-        #self.tau = 1.0 / frames_per_second
-        #music = [[100, 200, 0], [300, 400, 1], [500, 600, 2],]
 
-
-        self.frames = open_midi('Korobushka_Tetris_Theme.midigram')
-        #self.frames = open_midi('test.midigram')
+        self.frames = open_midi(midigram_filepath)
 
         self.key_count = 88
         self.frame_count = len(self.frames)
-        print ("Frame count")
-        print (self.frame_count)
+        self.training = True
 
         self.reset()
-        #print (self.frames)
-        #lala()
-        #self.length = 600
+
 
 
     def reset(self):
-        self.current_frame = rd.randint(0, self.frame_count-1)
-        self.current_frame = 0
+        if self.training:
+            self.current_frame = rd.randint(0, self.frame_count-1)
+        else:
+            self.current_frame = 0
         current_key = int(self.key_count/2)
         max_note_val = None
         for note_pitch, note_val in enumerate(self.frames[self.current_frame]):
@@ -153,61 +123,29 @@ class PianoEnv:
             if note_val > max_note_val:
                 current_key = note_pitch
                 max_note_val = note_val
-        self.current_finger_position = self.key2continous(current_key)
+        self.current_finger_position = current_key
         self.failed_frames = 0
-        #print ("## RESET ##")
-        #print ('Current frame: {}'.format(self.current_frame),
-        #       'Current finger position {}'.format(self.current_finger_position))
+
 
     def close(self):
         pass
 
+
     def render(self):
         pass
 
-    def key2continous(self, current_key):
-        return current_key
-        #key_size = 1.0/(self.key_count-1)
-        #return (key_size*current_key) + (key_size*0.5)
-
-    def continous2key(self, current_finger_position):
-        #key = int(current_finger_position * self.key_count)
-        key = current_finger_position
-        if key < 0 or key > self.key_count-1:
-            key = None
-        return key
 
     def step(self, action):
-        # self.tau = 0.02 # seconds between state updates
-        # thetaacc = (self.gravity * sintheta - costheta* temp) / (self.length * (4.0/3.0 - self.masspole * costheta * costheta / self.total_mass))
 
-        # x  = x + self.tau * x_dot
-        # x_dot = x_dot + self.tau * xacc
-        # theta = theta + self.tau * theta_dot
-        # theta_dot = theta_dot + self.tau * thetaacc
-        # (x,x_dot,theta,theta_dot)
-
-
-        #action_step = (1.0/(self.key_count))*0.3
-        action_step = 1
         step_sizes = [0, 1, -1, 2, -2, 3, -3]
-        #print (action)
 
-        self.current_finger_position += action_step * step_sizes[action]
+        self.current_finger_position += step_sizes[action]
 
-        #print (self.current_finger_position)
-
-        on_key = self.continous2key(self.current_finger_position)
         one_hot = [0 for _ in range(0, self.key_count)]
-        if on_key != None:
-            one_hot[on_key] = 1
+        one_hot[self.current_finger_position] = 1
 
         key_value = 0.0
-        if on_key != None:
-            try:
-                key_value = self.frames[self.current_frame][on_key]
-            except:
-                key_value = 0.01
+        if self.current_finger_position in self.frames[self.current_frame]:
             if key_value == 1.0:
                 reward = 0.5
             else:
@@ -234,30 +172,19 @@ class PianoEnv:
 
         if not must_reset:
             # If a key should be pressed but is not, done
-            #for key, key_val in enumerate(self.frames[self.current_frame]):
-            try:
-                key = self.frames[self.current_frame].index(1)
-            except ValueError:
-                key = None
-            #if key_val == 1.0 and key != on_key:
-            if key != None and key != on_key:
-                reward = 0.0001
-                self.failed_frames += 1
-                if self.failed_frames > 30:
-                    must_reset = True
+            for key, key_val in enumerate(self.frames[self.current_frame]):
+                if key_val == 1.0 and key != self.current_finger_position:
+                    reward = 0.0001
+                    self.failed_frames += 1
+                    if self.failed_frames > 30:
+                        must_reset = True
 
         self.current_frame += 1
 
         if must_reset:
             done = True
-            #self.reset()
 
         info = {}
-        #print ("Eval")
-        #print (action)
-        #print (state)
-        #print (reward)
-        #print (done)
         return state, reward, done, info
 
 
@@ -267,9 +194,7 @@ class PianoEnv:
 
 # Create the Cart-Pole game environment
 #env = gym.make('CartPole-v0')
-env = PianoEnv('CartPole-v0')
-#print (env.frames)
-#lala()
+env = PianoEnv('CartPole-v0', 'MIDI/test.midigram')
 
 env.reset()
 rewards = []
@@ -298,10 +223,11 @@ class QNetwork:
 
             # Target Q values for training
             self.targetQs_ = tf.placeholder(tf.float32, [None], name='target')
+            self.keep_prob = tf.placeholder(tf.float32, [None], name='target')
 
             # ReLU hidden layers
             self.fc1 = tf.contrib.layers.fully_connected(self.inputs_, hidden_size)
-            self.fc2 = tf.nn.dropout(tf.contrib.layers.fully_connected(self.fc1, hidden_size), 1.0)
+            self.fc2 = tf.nn.dropout(tf.contrib.layers.fully_connected(self.fc1, hidden_size), self.keep_prob)
             self.fc3 = tf.contrib.layers.fully_connected(self.fc2, hidden_size)
 
             # Linear output layer
@@ -331,7 +257,7 @@ class Memory():
                                replace=False)
         return [self.buffer[ii] for ii in idx]
 
-#if 0:
+
 train_episodes = 10000         # max number of episodes to learn from
 max_steps = env.frame_count    # max steps in an episode
 gamma = 0.9                    # future reward discount
@@ -412,7 +338,7 @@ if do_training:
                     action = env.action_space.sample()
                 else:
                     # Get action from Q-network
-                    feed = {mainQN.inputs_: state.reshape((1, *state.shape))}
+                    feed = {mainQN.inputs_: state.reshape((1, *state.shape)), mainQN.keep_prob=1.0}
                     Qs = sess.run(mainQN.output, feed_dict=feed)
                     action = np.argmax(Qs)
                     #print (action)
@@ -459,7 +385,7 @@ if do_training:
                 next_states = np.array([each[3] for each in batch])
 
                 # Train network
-                target_Qs = sess.run(mainQN.output, feed_dict={mainQN.inputs_: next_states})
+                target_Qs = sess.run(mainQN.output, feed_dict={mainQN.inputs_: next_states, mainQN.keep_prob: 0.7})
 
                 # Set target_Qs to 0 for states where episode ends
                 episode_ends = (next_states == np.zeros(states[0].shape)).all(axis=1)
@@ -472,7 +398,8 @@ if do_training:
                 loss, _ = sess.run([mainQN.loss, mainQN.opt],
                                     feed_dict={mainQN.inputs_: states,
                                                mainQN.targetQs_: targets,
-                                               mainQN.actions_: actions})
+                                               mainQN.actions_: actions,
+                                               mainQN.keep_prob: 1.0})
 
         saver.save(sess, "checkpoints/cartpole.ckpt")
 
@@ -494,9 +421,13 @@ if do_training:
     plt.show()
 
 
+## Testing
+
+
 test_episodes = 10
 test_max_steps = env.frame_count
 env.reset()
+env.training = False
 recorded_sessions = []
 with tf.Session() as sess:
     saver.restore(sess, tf.train.latest_checkpoint('checkpoints'))
@@ -508,7 +439,7 @@ with tf.Session() as sess:
             env.render()
 
             # Get action from Q-network
-            feed = {mainQN.inputs_: state.reshape((1, *state.shape))}
+            feed = {mainQN.inputs_: state.reshape((1, *state.shape)), mainQN.keep_prob=0.7}
             Qs = sess.run(mainQN.output, feed_dict=feed)
             action = np.argmax(Qs)
 
@@ -531,6 +462,5 @@ with tf.Session() as sess:
 
 with open('animation.json', 'w', encoding='utf-8') as anim_file:
     json.dump(recorded_sessions, anim_file, sort_keys=True, indent=4, separators=(',', ': '))
-    #json.dump(recorded_sessions, anim_file)
 
 env.close()
