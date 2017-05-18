@@ -13,16 +13,70 @@ import matplotlib.pyplot as plt
 from collections import deque
 
 
+def one_hot_decoder(state):
+    key_count = 88
+    finger_positions = []
+    for fn in range(0, 10):
+        start = fn*key_count
+        end = start+key_count
+        pos = 0
+        for idxx in range(start, end):
+            if state[idxx] == 1.0:
+                pos = idxx-start
+                finger_positions.append(pos)
+    return finger_positions
+
+
+def get_action(state):
+    finger_positions = one_hot_decoder(state)
+    lower_key = None
+    higher_key = None
+    shift = len(state)-(88*2)
+    for fn in range(0, 88):
+        if state[fn+shift]==1:
+            if fn < 44:
+                if lower_key is None:
+                    lower_key = fn
+                if fn < lower_key:
+                    lower_key = fn
+            elif fn >=44:
+                if higher_key is None:
+                    higher_key = fn
+                if fn > higher_key:
+                    higher_key = fn
+    actions = []
+
+    if lower_key is not None:
+        if finger_positions[2] > lower_key:
+            actions.append(12)
+        elif finger_positions[2] < lower_key:
+            actions.append(2)
+    if higher_key is not None:
+        if finger_positions[7] > higher_key:
+            actions.append(17)
+        elif finger_positions[7] < higher_key:
+            actions.append(7)
+
+    if len(actions)==0:
+        return 0
+    else:
+        return rd.choice(actions)
+
+
 # Create the Piano game environment
 env = gym.make('Piano-v0')
 env.reset()
 rewards = []
 
+state = None
 # Testing the environment
 if 1:
     for _ in range(100):
         env.render()
-        state, reward, done, info = env.step(env.action_space.sample()) # take a random action
+        if state is None:
+            state, reward, done, info = env.step(env.action_space.sample()) # take a random action
+        else:
+            state, reward, done, info = env.step(get_action(state)) # take a random action
         rewards.append(reward)
         if done:
             rewards = []
@@ -79,7 +133,8 @@ class Memory():
         return [self.buffer[ii] for ii in idx]
 
 
-train_episodes = 20000         # max number of episodes to learn from
+train_episodes = 10000         # max number of episodes to learn from
+training_steps = 2
 max_steps = 10000              # max steps in an episode
 gamma = 0.9                    # future reward discount
 
@@ -90,10 +145,10 @@ decay_rate = 0.000001          # exponential decay rate for exploration prob
 
 # Network parameters
 hidden_size = 128              # number of units in each Q-network hidden layer
-learning_rate = 0.00001        # Q-network learning rate
+learning_rate = 0.0001         # Q-network learning rate
 
 # Memory parameters
-memory_size = 1000000          # memory capacity
+memory_size = 5000000          # memory capacity
 batch_size = 128               # experience mini-batch size
 pretrain_length = batch_size   # number experiences to pretrain the memory
 
@@ -115,9 +170,10 @@ state, reward, done, _ = env.step(env.action_space.sample())
 memory = Memory(max_size=memory_size)
 
 # Make a bunch of random actions and store the experiences
+print ("Initial experiences")
 for ii in range(pretrain_length):
     # Uncomment the line below to watch the simulation
-    #env.render()
+    env.render()
 
     # Make a random action
     action = env.action_space.sample()
@@ -142,6 +198,7 @@ saver = tf.train.Saver()
 
 loss = 0.0
 if do_training:
+    print ("Training")
     # Now train with experiences
     rewards_list = []
     with tf.Session() as sess:
@@ -154,14 +211,19 @@ if do_training:
             t = 0
             while t < max_steps:
                 step += 1
+                #print (len(memory.buffer))
                 # Uncomment this next line to watch the training
-                env.render()
+                if ep % 10 == 0:
+                    env.render()
 
                 # Explore or Exploit
                 explore_p = explore_stop + (explore_start - explore_stop)*np.exp(-decay_rate*step)
                 if explore_p > np.random.rand():
                     # Make a random action
-                    action = env.action_space.sample()
+                    if state is None or 0.8 > np.random.rand():
+                        action = env.action_space.sample() # take a random action
+                    else:
+                        action = get_action(state) # take a predefined action
                 else:
                     # Get action from Q-network
                     feed = {mainQN.inputs_: state.reshape((1, *state.shape)), mainQN.keep_prob: 1.0}
@@ -205,23 +267,24 @@ if do_training:
                     state = next_state
                     t += 1
 
-                # Sample mini-batch from memory
-                batch = memory.sample(batch_size)
-                states = np.array([each[0] for each in batch])
-                actions = np.array([each[1] for each in batch])
-                rewards = np.array([each[2] for each in batch])
-                next_states = np.array([each[3] for each in batch])
+                for _ in range(0, training_steps):
+                    # Sample mini-batch from memory
+                    batch = memory.sample(batch_size)
+                    states = np.array([each[0] for each in batch])
+                    actions = np.array([each[1] for each in batch])
+                    rewards = np.array([each[2] for each in batch])
+                    next_states = np.array([each[3] for each in batch])
 
-                # Train network
-                target_Qs = sess.run(mainQN.output, feed_dict={mainQN.inputs_: next_states, mainQN.keep_prob: 0.7})
+                    # Train network
+                    target_Qs = sess.run(mainQN.output, feed_dict={mainQN.inputs_: next_states, mainQN.keep_prob: 0.7})
 
-                # Set target_Qs to 0 for states where episode ends
-                episode_ends = (next_states == np.zeros(states[0].shape)).all(axis=1)
-                #target_Qs[episode_ends] = (0, 0, 0, 0) # Actions
-                #target_Qs[episode_ends] = 0 # Actions
-                target_Qs[episode_ends] = [0 for _ in range(0,action_size)]
+                    # Set target_Qs to 0 for states where episode ends
+                    episode_ends = (next_states == np.zeros(states[0].shape)).all(axis=1)
+                    #target_Qs[episode_ends] = (0, 0, 0, 0) # Actions
+                    #target_Qs[episode_ends] = 0 # Actions
+                    target_Qs[episode_ends] = [0 for _ in range(0,action_size)]
 
-                targets = rewards + gamma * np.max(target_Qs, axis=1)
+                    targets = rewards + gamma * np.max(target_Qs, axis=1)
 
                 loss, _ = sess.run([mainQN.loss, mainQN.opt],
                                     feed_dict={mainQN.inputs_: states,
