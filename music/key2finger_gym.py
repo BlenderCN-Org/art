@@ -138,14 +138,19 @@ class QNetwork:
                 #print (self.inputs2d.shape)
                 #lala()
 
+                filters_count = 32
+                kernel_size = [4, 1] # Width and Height
+                strides = [1, 2] # Height and Width = 88 -> 44x32
+                self.cv1 = tf.layers.conv2d(self.inputs2d, filters_count, kernel_size, strides, activation=tf.nn.relu6)
+
                 filters_count = 64
                 kernel_size = [4, 1] # Width and Height
-                strides = [1, 2] # Height and Width
-                self.cv1 = tf.layers.conv2d(self.inputs2d, filters_count, kernel_size, strides, activation=tf.nn.relu6)
+                strides = [1, 2] # Height and Width = 44 -> 22x64
+                self.cv2 = tf.layers.conv2d(self.cv1, filters_count, kernel_size, strides, activation=tf.nn.relu6)
 
                 filters_count = 128
                 kernel_size = [4, 1] # Width and Height
-                strides = [1, 2] # Height and Width
+                strides = [1, 2] # Height and Width = 22 -> 11x128
                 self.cv2 = tf.layers.conv2d(self.cv1, filters_count, kernel_size, strides, activation=tf.nn.relu6)
 
                 self.fc1 = tf.contrib.layers.flatten(self.cv2)
@@ -197,7 +202,7 @@ explore_stop = 0.001           # minimum exploration probability
 decay_rate = 0.000001          # exponential decay rate for exploration prob
 
 # Network parameters
-hidden_size = 1024             # number of units in each Q-network hidden layer
+hidden_size = 512              # number of units in each Q-network hidden layer
 learning_rate = 0.0000001      # Q-network learning rate
 
 # Memory parameters
