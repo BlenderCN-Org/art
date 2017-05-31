@@ -14,6 +14,7 @@ def generate_specimens(specimens_count, frames):
         for frame_index in range(0, specimens.shape[1]):
             key_pressed_count = np.count_nonzero([frames[frame_index]>0])
             if key_pressed_count == 0:
+                specimens[specimen_index][frame_index] = np.zeros(specimens.shape[2], dtype=int)
                 continue
             elif key_pressed_count == 1:
                 finger_distribution = np.empty(10, dtype=int)
@@ -22,7 +23,7 @@ def generate_specimens(specimens_count, frames):
                 if 0.05 > rd.random():
                     finger_distribution = np.random.permutation(10)+1
                 else:
-                    finger_distribution = np.roll(np.arange(10)+1, rd.randint(0, 10))
+                    finger_distribution = np.roll(np.arange(1, 11), rd.randint(0, 10))
             specimens[specimen_index][frame_index] = np.array(frames[frame_index])
             nf=0
             it = np.nditer(specimens[specimen_index][frame_index], flags=['f_index'])
@@ -263,9 +264,9 @@ body {
     mutations = generate_specimens(specimens_count, frames)
     mutation_count = 0
     total_count = 0
-    for mutations_index in range(0, new_specimens.shape[0]):
-        if mutation_probability < rd.random():
-            continue
+    for mutations_index in range(cloned_count, specimens_count):
+        #if mutation_probability < rd.random():
+        #    continue
         total_count += 1
         for frame_index in range(0, new_specimens.shape[1]):
             if mutation_probability > rd.random():
