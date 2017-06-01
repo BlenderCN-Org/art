@@ -1,3 +1,5 @@
+import os
+import sys
 import time
 import json
 
@@ -111,6 +113,7 @@ def softmax(x):
     e_x = np.exp(x - np.max(x))
     return e_x / e_x.sum(axis=0)
 
+
 def scale_linear_bycolumn(rawpoints, high=100.0, low=0.0):
     mins = np.min(rawpoints, axis=0)
     maxs = np.max(rawpoints, axis=0)
@@ -120,13 +123,71 @@ def scale_linear_bycolumn(rawpoints, high=100.0, low=0.0):
     return high - (((high - low) * (maxs - rawpoints)) / rng)
 
 
+def load_json(path):
+    if not os.path.exists(path):
+        return False
+    else:
+        start = time.time()
+        while is_locked(path):
+            if start - time.time() > 1:
+                # Print every 1 second
+                print ("!! File {} locked, please unlock".format(path))
+                start = time.time()
+        with open(path) as data_file:
+            try:
+                data = json.load(data_file)
+                return data
+            except:
+                raise
+                return False
+
+
+def is_locked(path):
+    if os.path.exists("{}.lock".format(path)):
+        return True
+    else:
+        return False
+
+
+def lock_file(path):
+    locked_filepath = "{}.lock".format(path)
+    if not os.path.exists(locked_filepath):
+        open(locked_filepath, 'a').close()
+
+
+def unlock_file(path):
+    locked_filepath = "{}.lock".format(path)
+    if os.path.exists(locked_filepath):
+        os.remove(locked_filepath)
+
 
 ## MAIN CODE
+
+do_help = False
+if len(sys.argv) == 1:
+    do_help = True
+else:
+    try:
+        sufix = int(sys.argv[1])
+    except:
+        do_help = True
+if do_help:
+    print ("Usage:")
+    print ("key2finger_evolutionary.py instance_number")
+    print ("Example: key2finger_evolutionary.py 1")
+    sys.exit()
+
+print ("Loading instance {:d}".format(sufix))
 
 specimens_count = 50
 percent_to_clone = 0.5
 percent_to_select = 0.2
 mutation_probability = 0.05
+
+filepath_base = "best_speciment_{}{}.{}"
+html_filepath = filepath_base.format(sufix, "", "html")
+json_filepath = filepath_base.format(sufix, "", "json")
+first_save = True
 
 # IMPORT DATA
 frames = open_midi('MIDI/Hummelflug.midigram', -1)
@@ -155,6 +216,15 @@ end = time.time()
 elapsed = end - start
 print ("Specimens Generated in {:.2f} seconds".format(elapsed))
 
+# Load previous specimen
+print ("Loading last specimen")
+backup_filepath = filepath_base.format(sufix, "_backup", "json")
+if os.path.exists(backup_filepath):
+    best_saved_specimen = load_json(backup_filepath)
+    specimens[0] = best_saved_specimen
+    print ("Backup loaded")
+else:
+    print ("Backup not found")
 
 while 1:
     print (".")
@@ -221,10 +291,24 @@ body {
                 specimen_text = "{}{:02d}".format(specimen_text, specimens[best_specimen][frame_index][finger_index])
         specimen_text = "{}{}".format(specimen_text, "<br>\n")
     specimen_text = "{}{}".format(specimen_text, "</p>")
-    with open("best_speciment.html", "w") as text_file:
+
+    if first_save:
+        # Security check
+        if os.path.exists(html_filepath):
+            print ("Error saving {}, file already exists".format(html_filepath))
+            sys.exit()
+        if os.path.exists(json_filepath):
+            print ("Error saving {}, file already exists".format(html_filepath))
+            sys.exit()
+        first_save = False
+    lock_file(html_filepath)
+    with open(html_filepath, "w") as text_file:
         text_file.write(specimen_text)
-    with open('best_speciment.json', 'w', encoding='utf-8') as anim_file:
+    unlock_file(html_filepath)
+    lock_file(json_filepath)
+    with open(json_filepath, 'w', encoding='utf-8') as anim_file:
         json.dump(specimens[best_specimen].tolist(), anim_file, sort_keys=True, indent=4, separators=(',', ': '))
+    unlock_file(json_filepath)
 
     scores = scale_linear_bycolumn(scores, 1.0, 0.0)
     softmax_scores = softmax(scores)
@@ -241,6 +325,15 @@ body {
         new_specimens[n] = specimens[np.random.choice(fitness_selection)]
     # Always keep best specimen
     new_specimens[0] = specimens[best_specimen]
+    # Load specimens from other instances
+    for instance_number in range(0, 8):
+        if instance_number == sufix:
+            continue
+        saved_filepath = filepath_base.format(instance_number, "", "json")
+        if os.path.exists(saved_filepath):
+            best_saved_specimen = load_json(saved_filepath)
+            new_specimens[1+instance_number] = best_saved_specimen
+            print ("Loaded instance {} specimen".format(instance_number))
     # Crossover
     for n in range(cloned_count, specimens_count):
         mixer_size = (specimens.shape[1], specimens.shape[2])
@@ -265,15 +358,19 @@ body {
     mutation_count = 0
     total_count = 0
     for mutations_index in range(cloned_count, specimens_count):
-        #if mutation_probability < rd.random():
-        #    continue
+        if not mutation_probability > rd.random():
+            continue
         total_count += 1
-        for frame_index in range(0, new_specimens.shape[1]):
-            if mutation_probability > rd.random():
-                mutation_count += 1
-                #mutations = generate_specimens(1, frames)
-                #new_specimens[mutations_index][frame_index] = mutations[0][frame_index]
-                new_specimens[mutations_index][frame_index] = mutations[mutations_index][frame_index]
+        if False:
+            for frame_index in range(0, new_specimens.shape[1]):
+                if mutation_probability > rd.random():
+                    mutation_count += 1
+                    #mutations = generate_specimens(1, frames)
+                    #new_specimens[mutations_index][frame_index] = mutations[0][frame_index]
+                    new_specimens[mutations_index][frame_index] = mutations[mutations_index][frame_index]
+        else:
+            random_frame = rd.randint(0, mutations.shape[1]-1)
+            new_specimens[mutations_index][random_frame] = mutations[mutations_index][random_frame]
     end = time.time()
     elapsed = end - start
     print ("{} Frames Mutated on {} Specimens in {:.2f} seconds".format(mutation_count, total_count, elapsed))
