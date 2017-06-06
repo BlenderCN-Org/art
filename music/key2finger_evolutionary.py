@@ -313,14 +313,10 @@ def fitness_eval(specimens, initial_left_hand_position, initial_right_hand_posit
                             key_b_iter.iternext()
                         key_a_iter.iternext()
 
-            #print (finger_position)
-            #print (current_frame_finger_positions[frame_index])
-
             current_finger_position = current_frame_finger_positions[frame_index]
 
             # Check energy eficiency
             # -1 means finger not used
-            #print (current_finger_position)
             if current_finger_position[0] > -1:
                 mixing_score += energy_cost_pinky
             if current_finger_position[1] > -1:
@@ -356,7 +352,7 @@ def fitness_eval(specimens, initial_left_hand_position, initial_right_hand_posit
                 left_hand_alternative_positions.append(current_finger_position[3]-1)
             if current_finger_position[4] > -1:
                 left_hand_alternative_positions.append(current_finger_position[4]-2)
-            #print (frame_index, left_hand_alternative_positions)
+
             # RIGHT HAND
             right_hand_alternative_positions = []
             if current_finger_position[5] > -1:
@@ -370,12 +366,16 @@ def fitness_eval(specimens, initial_left_hand_position, initial_right_hand_posit
             if current_finger_position[9] > -1:
                 right_hand_alternative_positions.append(current_finger_position[9]-2)
 
+            # If enough information, calculate left hand position
+            # else use last position
             left_hand_position = None
             if len(left_hand_alternative_positions) > 0:
                 left_hand_position = int(np.array(left_hand_alternative_positions).mean())
             else:
                 if previous_frame_left_hand_position is not None:
                     left_hand_position = previous_frame_left_hand_position
+            # If enough information, calculate right hand position
+            # else use last position
             right_hand_position = None
             if len(right_hand_alternative_positions) > 0:
                 right_hand_position = int(np.array(right_hand_alternative_positions).mean())
@@ -383,6 +383,8 @@ def fitness_eval(specimens, initial_left_hand_position, initial_right_hand_posit
                 if previous_frame_right_hand_position is not None:
                     right_hand_position = previous_frame_right_hand_position
 
+            # If we have information about left hand position
+            # calculate traveled distance
             if left_hand_position is not None:
                 if previous_frame_left_hand_position is not None:
                     dist = previous_frame_left_hand_position - left_hand_position
@@ -390,6 +392,8 @@ def fitness_eval(specimens, initial_left_hand_position, initial_right_hand_posit
                         dist = dist*-1
                     left_hand_distance += dist
 
+            # If we have information about right hand position
+            # calculate traveled distance
             if right_hand_position is not None:
                 if previous_frame_right_hand_position is not None:
                     dist = previous_frame_right_hand_position - right_hand_position
@@ -397,6 +401,8 @@ def fitness_eval(specimens, initial_left_hand_position, initial_right_hand_posit
                         dist = dist*-1
                     right_hand_distance += dist
 
+            # If left hand is at the right of right hand
+            # add cost
             if left_hand_position is not None and right_hand_position is not None:
                 if left_hand_position > right_hand_position:
                     mixing_score +=10
@@ -407,11 +413,15 @@ def fitness_eval(specimens, initial_left_hand_position, initial_right_hand_posit
                 if dist_between_hands < 3:
                     mixing_score +=10
 
+            # If we have information about left hand position
+            # store it
             if left_hand_position is not None:
                 previous_frame_left_hand_position = left_hand_position
                 left_hand_position_per_frame[frame_index] = left_hand_position
             else:
                 left_hand_position_per_frame[frame_index] = -1
+            # If we have information about right hand position
+            # store it
             if right_hand_position is not None:
                 previous_frame_right_hand_position = right_hand_position
                 right_hand_position_per_frame[frame_index] = right_hand_position
@@ -715,12 +725,13 @@ print ("Loading instance {:d}".format(sufix))
 
 
 # IMPORT DATA
-frames = open_midi('MIDI/Hummelflug.midigram', -1)
-print ("Frames: ", frames.shape[0])
+full_frames = open_midi('MIDI/Hummelflug.midigram', -1)
+print ("Frames: ", full_frames.shape[0])
 
 # ENCODE
 # Leave only frames with Key transitions
 # (Delete frame when equal to frame-1).
+frames = np.array(full_frames)
 n = 1
 while n < frames.shape[0]:
     if np.array_equal(frames[n], frames[n-1]):
@@ -736,16 +747,22 @@ frame_steps = 10
 processed_frames = None
 left_hand_position = None
 right_hand_position = None
-while processed_frames is None or processed_frames < frames.shape[0]:
-    if processed_frames is None:
-        start_frame = 0
-        end_frame = start_frame + frame_steps
-        processed_frames = 0
-    else:
-        start_frame += frame_steps
-        end_frame = start_frame + frame_steps
-    specimen, left_hand_position, right_hand_position = up_hill (sufix, frames, start_frame, end_frame, 100, left_hand_position, right_hand_position)
-    print ("Hand positions: {} {}".format(left_hand_position, right_hand_position))
-    #specimen, left_hand_position, right_hand_position = up_hill (sufix, frames, 100, 200, 5, left_hand_position[-1], right_hand_position[-1])
-    #print (left_hand_position[-1], right_hand_position[-1])
-    processed_frames +=  frame_steps
+if 0:
+    while processed_frames is None or processed_frames < frames.shape[0]:
+        if processed_frames is None:
+            start_frame = 0
+            end_frame = start_frame + frame_steps
+            processed_frames = 0
+        else:
+            start_frame += frame_steps
+            end_frame = start_frame + frame_steps
+        specimen, left_hand_position, right_hand_position = up_hill (sufix, frames, start_frame, end_frame, 100, left_hand_position, right_hand_position)
+        print ("Hand positions: {} {}".format(left_hand_position, right_hand_position))
+        #specimen, left_hand_position, right_hand_position = up_hill (sufix, frames, 100, 200, 5, left_hand_position[-1], right_hand_position[-1])
+        #print (left_hand_position[-1], right_hand_position[-1])
+        processed_frames +=  frame_steps
+
+fullframes_filepath_json = "full_frames.json"
+
+with open(fullframes_filepath_json, 'w', encoding='utf-8') as anim_file:
+    json.dump(full_frames.tolist(), anim_file, sort_keys=True, indent=4, separators=(',', ': '))
