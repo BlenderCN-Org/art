@@ -27,7 +27,6 @@ def generate_specimens(specimens_count, frames):
                 key_pressed_count = np.count_nonzero([frames[frame_index]>0])
                 if key_pressed_count == 0:
                     specimens[specimen_index][frame_index] = np.zeros(specimens.shape[2], dtype=int)
-                    # continue
                     mixing_detected = False
                     break
                 elif key_pressed_count == 1:
@@ -217,6 +216,7 @@ def generate_specimens(specimens_count, frames):
                             break
                     if mixing_detected:
                         break
+                # Check mixing right hand
                 for fi in range(5, 10):
                     for fii in range(fi, 10):
                         if current_frame_finger_positions[fii] == 0 or current_frame_finger_positions[fi] == 0:
@@ -235,43 +235,54 @@ def generate_specimens(specimens_count, frames):
 # Distance between fingers
 # Velocity on each "frame" by finger
 # Mixing fingers
-def fitness_eval(specimens):
-    mixing_cost = 2
+def fitness_eval(specimens, initial_left_hand_position, initial_right_hand_position):
+    #mixing_cost = 2
     energy_cost_pinky = 3
     energy_cost_anular = 2
     energy_cost_middle = 1
     energy_cost_index = 0
     energy_cost_thumb = 0
-    pinky_min = 6  # Left
-    pinky_max = 2  # Right
-    ring_min = 4   # Left
-    ring_max = 1   # Right
-    index_min = 6  # Right
-    index_max = 1  # Left
-    thumb_min = 10 # Right
-    thumb_max = -2 #4  # Left
+    #pinky_min = 6  # Left
+    #pinky_max = 2  # Right
+    #ring_min = 4   # Left
+    #ring_max = 1   # Right
+    #index_min = 6  # Right
+    #index_max = 1  # Left
+    #thumb_min = 10 # Right
+    #thumb_max = -2 #4  # Left
 
     scores = np.empty(specimens.shape[0], dtype=int)
+    left_hand_position_per_specimen  = np.empty([specimens.shape[0], specimens.shape[1]], dtype=int)
+    right_hand_position_per_specimen = np.empty([specimens.shape[0], specimens.shape[1]], dtype=int)
     for specimen_index in range(0, specimens.shape[0]):
         finger_distances = np.zeros(10, dtype=int) # Initial finger distance
-        current_frame_finger_positions = np.zeros([specimens.shape[1], 10], dtype=int)
-        finger_previous_position = np.arange(44, 54, dtype=int) # Initial finger positions
+        current_frame_finger_positions = np.zeros([specimens.shape[1], 10], dtype=int)-1
+        #finger_previous_position = np.arange(44, 54, dtype=int) # Initial finger positions
+        finger_previous_position = np.zeros(10, dtype=int)-1
         mixing_score = 0 # Initial mixing score
-        previous_frame_left_hand_position = 42
-        previous_frame_right_hand_position = 47
+        previous_frame_left_hand_position = None
+        previous_frame_right_hand_position = None
         left_hand_distance = 0
         right_hand_distance = 0
+        left_hand_position_per_frame = np.empty(specimens.shape[1], dtype=int)
+        right_hand_position_per_frame = np.empty(specimens.shape[1], dtype=int)
         for frame_index in range(0, specimens.shape[1]):
+            if frame_index==0 and initial_left_hand_position is not None:
+                previous_frame_left_hand_position = initial_left_hand_position
+            if frame_index==0 and initial_right_hand_position is not None:
+                previous_frame_right_hand_position = initial_right_hand_position
             # Get pressed keys
             keys_with_finger = [specimens[specimen_index][frame_index]>0]
             for finger_index in specimens[specimen_index][frame_index][keys_with_finger]:
                 key_with_finger = [specimens[specimen_index][frame_index]==finger_index] # True for finger_index
                 current_position = np.argmax(key_with_finger) # What index is True?
-                current_frame_finger_positions[frame_index][finger_index-1] = current_position+1
+                current_frame_finger_positions[frame_index][finger_index-1] = current_position
                 try:
-                    dist = finger_previous_position[finger_index-1]-current_position
+                    if finger_previous_position[finger_index-1] > -1:
+                        dist = current_position - finger_previous_position[finger_index-1]
+                    else:
+                        dist = 0
                 except:
-                    print (finger_index, current_position)
                     raise
                 if dist < 0:
                     dist = dist *-1
@@ -281,100 +292,136 @@ def fitness_eval(specimens):
                     print (finger_index)
                     raise
                 finger_previous_position[finger_index-1] = current_position
+
             finger_position = finger_previous_position
             # Check finger mixing
-            keys_with_finger = [specimens[specimen_index][frame_index]>0]
-            if np.any(keys_with_finger):
-                key_a_iter = np.nditer(specimens[specimen_index][frame_index][keys_with_finger], flags=['f_index'])
-                while not key_a_iter.finished:
-                    key_b_iter = np.nditer(specimens[specimen_index][frame_index][keys_with_finger], flags=['f_index'])
-                    while not key_b_iter.finished:
-                        if key_a_iter[0] < key_b_iter[0] and finger_position[key_a_iter[0]-1] > finger_position[key_b_iter[0]-1]:
-                            # If a finger with small index
-                            # is in a higher position
-                            mixing_score += mixing_cost
-                        if key_b_iter[0] > key_b_iter[0] and finger_position[key_a_iter[0]-1] < finger_position[key_b_iter[0]-1]:
-                            # If a finger with large index
-                            # is in a lower position
-                            mixing_score += mixing_cost
-                        key_b_iter.iternext()
-                    key_a_iter.iternext()
+            if 0: # Fingers never mix!
+                keys_with_finger = [specimens[specimen_index][frame_index]>0]
+                if np.any(keys_with_finger):
+                    key_a_iter = np.nditer(specimens[specimen_index][frame_index][keys_with_finger], flags=['f_index'])
+                    while not key_a_iter.finished:
+                        key_b_iter = np.nditer(specimens[specimen_index][frame_index][keys_with_finger], flags=['f_index'])
+                        while not key_b_iter.finished:
+                            if key_a_iter[0] < key_b_iter[0] and finger_position[key_a_iter[0]-1] > finger_position[key_b_iter[0]-1]:
+                                # If a finger with small index
+                                # is in a higher position
+                                mixing_score += mixing_cost
+                            if key_b_iter[0] > key_b_iter[0] and finger_position[key_a_iter[0]-1] < finger_position[key_b_iter[0]-1]:
+                                # If a finger with large index
+                                # is in a lower position
+                                mixing_score += mixing_cost
+                            key_b_iter.iternext()
+                        key_a_iter.iternext()
+
+            #print (finger_position)
+            #print (current_frame_finger_positions[frame_index])
+
+            current_finger_position = current_frame_finger_positions[frame_index]
 
             # Check energy eficiency
-            if finger_position[0] > 0:
+            # -1 means finger not used
+            #print (current_finger_position)
+            if current_finger_position[0] > -1:
                 mixing_score += energy_cost_pinky
-            if finger_position[1] > 0:
+            if current_finger_position[1] > -1:
                 mixing_score += energy_cost_anular
-            if finger_position[2] > 0:
+            if current_finger_position[2] > -1:
                 mixing_score += energy_cost_middle
-            if finger_position[3] > 0:
+            if current_finger_position[3] > -1:
                 mixing_score += energy_cost_index
-            if finger_position[4] > 0:
+            if current_finger_position[4] > -1:
                 mixing_score += energy_cost_thumb
             #
-            if finger_position[9] > 0:
+            if current_finger_position[9] > -1:
                 mixing_score += energy_cost_pinky
-            if finger_position[8] > 0:
+            if current_finger_position[8] > -1:
                 mixing_score += energy_cost_anular
-            if finger_position[7] > 0:
+            if current_finger_position[7] > -1:
                 mixing_score += energy_cost_middle
-            if finger_position[6] > 0:
+            if current_finger_position[6] > -1:
                 mixing_score += energy_cost_index
-            if finger_position[5] > 0:
+            if current_finger_position[5] > -1:
                 mixing_score += energy_cost_thumb
 
             # Estimate hand position
             # LEFT HAND
-            left_hand_position = []
-            if finger_position[0] > 0:
-                left_hand_position.append(finger_position[0]+2)
-            if finger_position[1] > 0:
-                left_hand_position.append(finger_position[1]+1)
-            if finger_position[2] > 0:
-                left_hand_position.append(finger_position[2])
-            if finger_position[3] > 0:
-                left_hand_position.append(finger_position[3]-1)
-            if finger_position[4] > 0:
-                left_hand_position.append(finger_position[4]-2)
+            left_hand_alternative_positions = []
+            if current_finger_position[0] > -1:
+                left_hand_alternative_positions.append(current_finger_position[0]+2)
+            if current_finger_position[1] > -1:
+                left_hand_alternative_positions.append(current_finger_position[1]+1)
+            if current_finger_position[2] > -1:
+                left_hand_alternative_positions.append(current_finger_position[2])
+            if current_finger_position[3] > -1:
+                left_hand_alternative_positions.append(current_finger_position[3]-1)
+            if current_finger_position[4] > -1:
+                left_hand_alternative_positions.append(current_finger_position[4]-2)
+            #print (frame_index, left_hand_alternative_positions)
             # RIGHT HAND
-            right_hand_position = []
-            if finger_position[5] > 0:
-                right_hand_position.append(finger_position[5]+2)
-            if finger_position[6] > 0:
-                right_hand_position.append(finger_position[6]+1)
-            if finger_position[7] > 0:
-                right_hand_position.append(finger_position[7])
-            if finger_position[8] > 0:
-                right_hand_position.append(finger_position[8]-1)
-            if finger_position[9] > 0:
-                right_hand_position.append(finger_position[9]-2)
+            right_hand_alternative_positions = []
+            if current_finger_position[5] > -1:
+                right_hand_alternative_positions.append(current_finger_position[5]+2)
+            if current_finger_position[6] > -1:
+                right_hand_alternative_positions.append(current_finger_position[6]+1)
+            if current_finger_position[7] > -1:
+                right_hand_alternative_positions.append(current_finger_position[7])
+            if current_finger_position[8] > -1:
+                right_hand_alternative_positions.append(current_finger_position[8]-1)
+            if current_finger_position[9] > -1:
+                right_hand_alternative_positions.append(current_finger_position[9]-2)
 
-            if len(left_hand_position) > 0:
-                left_hand_position = int(np.array(left_hand_position).mean())
+            left_hand_position = None
+            if len(left_hand_alternative_positions) > 0:
+                left_hand_position = int(np.array(left_hand_alternative_positions).mean())
             else:
-                left_hand_position = previous_frame_left_hand_position
-            if len(right_hand_position) > 0:
-                right_hand_position = int(np.array(right_hand_position).mean())
+                if previous_frame_left_hand_position is not None:
+                    left_hand_position = previous_frame_left_hand_position
+            right_hand_position = None
+            if len(right_hand_alternative_positions) > 0:
+                right_hand_position = int(np.array(right_hand_alternative_positions).mean())
             else:
-                right_hand_position = previous_frame_right_hand_position
+                if previous_frame_right_hand_position is not None:
+                    right_hand_position = previous_frame_right_hand_position
 
-            dist = previous_frame_left_hand_position - left_hand_position
-            if dist < 0:
-                dist = dist*-1
-            left_hand_distance += dist
-            dist = previous_frame_right_hand_position - right_hand_position
-            if dist < 0:
-                dist = dist*-1
-            right_hand_distance += dist
+            if left_hand_position is not None:
+                if previous_frame_left_hand_position is not None:
+                    dist = previous_frame_left_hand_position - left_hand_position
+                    if dist < 0:
+                        dist = dist*-1
+                    left_hand_distance += dist
 
-            if left_hand_position > right_hand_position:
-                mixing_score +=5
+            if right_hand_position is not None:
+                if previous_frame_right_hand_position is not None:
+                    dist = previous_frame_right_hand_position - right_hand_position
+                    if dist < 0:
+                        dist = dist*-1
+                    right_hand_distance += dist
 
-            previous_frame_left_hand_position = left_hand_position
-            previous_frame_right_hand_position = right_hand_position
+            if left_hand_position is not None and right_hand_position is not None:
+                if left_hand_position > right_hand_position:
+                    mixing_score +=10
 
-        scores[specimen_index] = np.sum(finger_distances)+left_hand_distance+right_hand_distance+mixing_score
-    return scores
+                dist_between_hands = left_hand_position - right_hand_position
+                if dist_between_hands < 0:
+                    dist_between_hands = dist_between_hands * -1
+                if dist_between_hands < 3:
+                    mixing_score +=10
+
+            if left_hand_position is not None:
+                previous_frame_left_hand_position = left_hand_position
+                left_hand_position_per_frame[frame_index] = left_hand_position
+            else:
+                left_hand_position_per_frame[frame_index] = -1
+            if right_hand_position is not None:
+                previous_frame_right_hand_position = right_hand_position
+                right_hand_position_per_frame[frame_index] = right_hand_position
+            else:
+                right_hand_position_per_frame[frame_index] = -1
+
+        scores[specimen_index] = (np.sum(finger_distances)*5)+(left_hand_distance*3)+(right_hand_distance*3)+mixing_score
+        left_hand_position_per_specimen[specimen_index] = left_hand_position_per_frame
+        right_hand_position_per_specimen[specimen_index] = right_hand_position_per_frame
+    return scores, left_hand_position_per_specimen, right_hand_position_per_specimen
 
 
 # Select fitests
@@ -430,88 +477,8 @@ def unlock_file(path):
     if os.path.exists(locked_filepath):
         os.remove(locked_filepath)
 
-
-## MAIN CODE
-
-do_help = False
-if len(sys.argv) == 1:
-    do_help = True
-else:
-    try:
-        sufix = int(sys.argv[1])
-        specimens_count = int(sys.argv[2])
-        percent_to_clone = float(sys.argv[3])
-        percent_to_select = float(sys.argv[4])
-        mutation_probability = float(sys.argv[5])
-    except:
-        do_help = True
-if do_help:
-    print ("Usage:")
-    print ("key2finger_evolutionary.py instance_number specimens_count percent_to_clone percent_to_select mutation_probability")
-    print ("Example: key2finger_evolutionary.py 1 50 0.5 0.2 0.05")
-    sys.exit()
-
-print ("Loading instance {:d}".format(sufix))
-
-#specimens_count = 50
-#percent_to_clone = 0.5
-#percent_to_select = 0.2
-#mutation_probability = 0.05
-
-filepath_base = "best_speciment_{}{}.{}"
-html_filepath = filepath_base.format(sufix, "", "html")
-json_filepath = filepath_base.format(sufix, "", "json")
-first_save = True
-
-# IMPORT DATA
-frames = open_midi('MIDI/Hummelflug.midigram', -1)
-print ("Frames: ", frames.shape[0])
-
-# ENCODE
-# Leave only frames with Key transitions
-# (Delete frame when equal to frame-1).
-n = 1
-while n < frames.shape[0]:
-    if np.array_equal(frames[n], frames[n-1]):
-        frames = np.delete(frames, (n), axis=0)
-    else:
-        n += 1
-print ("Reduced frames:", frames.shape[0])
-
-# Smooth:
-# If a key is released and presed again really quicly
-# remove that transition.
-
-# FIRST GENERATION
-print ("Generating Specimens")
-start = time.time()
-specimens = generate_specimens(specimens_count, frames)
-end = time.time()
-elapsed = end - start
-print ("Specimens Generated in {:.2f} seconds".format(elapsed))
-
-# Load previous specimen
-print ("Loading last specimen")
-backup_filepath = filepath_base.format(sufix, "_backup", "json")
-if os.path.exists(backup_filepath):
-    best_saved_specimen = load_json(backup_filepath)
-    specimens[0] = best_saved_specimen
-    print ("Backup loaded")
-else:
-    print ("Backup not found")
-
-while 1:
-    print (".")
-    print ("Fitness Evaluation")
-    start = time.time()
-    scores = 50000-fitness_eval(specimens) # Invert scores. Value to maximize
-    end = time.time()
-    elapsed = end - start
-    print ("Fitness Evaluated in {:.2f} seconds: {:d}".format(elapsed, scores.max()))
-    best_specimen = np.argmax(scores)
-    print ("Saving speciment {}".format(best_specimen))
-    # Specimen to Text
-    specimen_text = """<style>
+def css_style():
+    return """<style>
 body {
     background: black;
 }
@@ -555,99 +522,230 @@ body {
 .finger_10 {
     color: green;
 }
+
+.finger_none {
+    color: blue;
+}
+
+.left_hand {
+    text-decoration: underline;
+}
+
+.right_hand {
+    text-decoration: line-through;
+}
 </style>
 <p>"""
-    for frame_index in range(0, specimens.shape[1]):
-        for finger_index in range(0, specimens.shape[2]):
-            if specimens[best_specimen][frame_index][finger_index] > 0:
-                specimen_text = "{0}<span class=\"finger_{1:02d}\">{1:02d}</span>".format(specimen_text, specimens[best_specimen][frame_index][finger_index])
-            else:
-                specimen_text = "{}{:02d}".format(specimen_text, specimens[best_specimen][frame_index][finger_index])
-        specimen_text = "{}{}".format(specimen_text, "<br>\n")
-    specimen_text = "{}{}".format(specimen_text, "</p>")
 
-    if first_save:
-        # Security check
-        if os.path.exists(html_filepath):
-            print ("Error saving {}, file already exists".format(html_filepath))
-            sys.exit()
-        if os.path.exists(json_filepath):
-            print ("Error saving {}, file already exists".format(html_filepath))
-            sys.exit()
-        first_save = False
-    lock_file(html_filepath)
-    with open(html_filepath, "w") as text_file:
-        text_file.write(specimen_text)
-    unlock_file(html_filepath)
-    lock_file(json_filepath)
-    with open(json_filepath, 'w', encoding='utf-8') as anim_file:
-        json.dump(specimens[best_specimen].tolist(), anim_file, sort_keys=True, indent=4, separators=(',', ': '))
-    unlock_file(json_filepath)
+def up_hill (sufix, frames, start_frame, end_frame, max_steps, initial_left_hand_position, initial_right_hand_position):
+    frames = frames[start_frame:end_frame]
+    # FIRST GENERATION
+    filepath_base = "best_specimen_{}{}.{}"
+    html_filepath = filepath_base.format(sufix, "{:06d}_{:06d}".format(start_frame, end_frame), "html")
+    json_filepath = filepath_base.format(sufix, "{:06d}_{:06d}".format(start_frame, end_frame), "json")
+    first_save = True
 
-    scores = scale_linear_bycolumn(scores, 1.0, 0.0)
-    softmax_scores = softmax(scores)
-
-    fitness_selection = np.random.choice(np.arange(specimens.shape[0]), int(specimens_count*percent_to_select), p=softmax_scores)
-
-    print ("Crossover Specimens")
+    print ("Generating Specimens")
     start = time.time()
-    new_specimens = np.empty((specimens_count, frames.shape[0], 88), dtype=int)
-    cloned_count = int(specimens_count*percent_to_clone)
-    new_count = specimens_count - cloned_count
-    # Clone
-    for n in range(0, cloned_count):
-        new_specimens[n] = specimens[np.random.choice(fitness_selection)]
-    # Always keep best specimen
-    new_specimens[0] = specimens[best_specimen]
-    # Load specimens from other instances
-    for instance_number in range(0, 8):
-        if instance_number == sufix:
-            continue
-        saved_filepath = filepath_base.format(instance_number, "", "json")
-        if os.path.exists(saved_filepath):
-            best_saved_specimen = load_json(saved_filepath)
-            new_specimens[1+instance_number] = best_saved_specimen
-            print ("Loaded instance {} specimen".format(instance_number))
-    # Crossover
-    for n in range(cloned_count, specimens_count):
-        mixer_size = (specimens.shape[1], specimens.shape[2])
-        mixer = np.random.random_integers(low=0, high=1, size=mixer_size)
-        for nn in range(0, mixer.shape[0]):
-            if mixer[nn][0] == 1:
-                mixer[nn] = np.ones(mixer.shape[1], dtype=int)
-            else:
-                mixer[nn] = np.zeros(mixer.shape[1], dtype=int)
-        specimen_a = specimens[np.random.choice(fitness_selection)]
-        specimen_b = specimens[np.random.choice(fitness_selection)]
-
-        new_specimens[n] = (specimen_a*mixer)+(specimen_b*(1-mixer))
+    specimens = generate_specimens(specimens_count, frames)
     end = time.time()
     elapsed = end - start
-    print ("Specimens Crossover in {:.2f} seconds".format(elapsed))
+    print ("Specimens Generated in {:.2f} seconds".format(elapsed))
 
-    # Mutate
-    print ("Mutate Frames")
-    start = time.time()
-    mutations = generate_specimens(specimens_count, frames)
-    mutation_count = 0
-    total_count = 0
-    for mutations_index in range(cloned_count, specimens_count):
-        if not mutation_probability > rd.random():
-            continue
-        total_count += 1
-        if 0.5 > rd.random():
-            # Half of the time mutate several Frames
-            for frame_index in range(0, new_specimens.shape[1]):
-                if mutation_probability > rd.random():
-                    mutation_count += 1
-                    new_specimens[mutations_index][frame_index] = mutations[mutations_index][frame_index]
+    # Load previous specimen
+    if 0:
+        print ("Loading last specimen")
+        backup_filepath = filepath_base.format(sufix, "{:06d}_{:06d}_backup".format(start_frame, end_frame), "json")
+        if os.path.exists(backup_filepath):
+            best_saved_specimen = load_json(backup_filepath)
+            specimens[0] = best_saved_specimen
+            print ("Backup loaded")
         else:
-            # Half of the time mutate only one Frame
-            mutation_count += 1
-            random_frame = rd.randint(0, mutations.shape[1]-1)
-            new_specimens[mutations_index][random_frame] = mutations[mutations_index][random_frame]
-    end = time.time()
-    elapsed = end - start
-    print ("{} Frames Mutated on {} Specimens in {:.2f} seconds".format(mutation_count, total_count, elapsed))
+            print ("Backup not found")
 
-    specimens = new_specimens
+    step_count = 0
+    while step_count < max_steps:
+        step_count += 1
+        print (".")
+        print ("Fitness Evaluation")
+        start = time.time()
+        scores, left_hand_position, right_hand_position = fitness_eval(specimens, initial_left_hand_position, initial_right_hand_position) # Invert scores. Value to maximize
+        scores = 50000-scores
+        end = time.time()
+        elapsed = end - start
+        print ("Fitness Evaluated in {:.2f} seconds: {:d}".format(elapsed, scores.max()))
+        best_specimen = np.argmax(scores)
+        print ("Saving speciment {}".format(best_specimen))
+        # Specimen to Text
+        specimen_text = css_style()
+
+        for frame_index in range(0, specimens.shape[1]):
+            specimen_text = "{}<span class=\"finger_01\">{:02d}</span>".format(specimen_text, left_hand_position[best_specimen][frame_index])
+            specimen_text = "{}<span class=\"finger_06\">{:02d}</span>".format(specimen_text, right_hand_position[best_specimen][frame_index])
+            for key_index in range(0, specimens.shape[2]):
+                hand_class = ""
+                if key_index == right_hand_position[best_specimen][frame_index]:
+                    hand_class = " right_hand"
+                if key_index == left_hand_position[best_specimen][frame_index]:
+                    hand_class += " left_hand"
+                if specimens[best_specimen][frame_index][key_index] > 0:
+                    specimen_text = "{0}<span class=\"finger_{1:02d}{2}\">{1:02d}</span>".format(specimen_text, specimens[best_specimen][frame_index][key_index], hand_class)
+                else:
+                    if hand_class != "":
+                        specimen_text = "{}<span class=\"finger_none {}\">{:02d}</span>".format(specimen_text, hand_class, specimens[best_specimen][frame_index][key_index])
+                    else:
+                        specimen_text = "{}{:02d}".format(specimen_text, specimens[best_specimen][frame_index][key_index])
+            specimen_text = "{}{}".format(specimen_text, "<br>\n")
+        specimen_text = "{}{}".format(specimen_text, "</p>")
+
+        if first_save:
+            # Security check
+            if os.path.exists(html_filepath):
+                print ("Error saving {}, file already exists".format(html_filepath))
+                sys.exit()
+            if os.path.exists(json_filepath):
+                print ("Error saving {}, file already exists".format(html_filepath))
+                sys.exit()
+            first_save = False
+        lock_file(html_filepath)
+        with open(html_filepath, "w") as text_file:
+            text_file.write(specimen_text)
+        unlock_file(html_filepath)
+        lock_file(json_filepath)
+        with open(json_filepath, 'w', encoding='utf-8') as anim_file:
+            json.dump(specimens[best_specimen].tolist(), anim_file, sort_keys=True, indent=4, separators=(',', ': '))
+        unlock_file(json_filepath)
+
+        scores = scale_linear_bycolumn(scores, 1.0, 0.0)
+        softmax_scores = softmax(scores)
+
+        fitness_selection = np.random.choice(np.arange(specimens.shape[0]), int(specimens_count*percent_to_select), p=softmax_scores)
+
+        print ("Crossover Specimens")
+        start = time.time()
+        new_specimens = np.empty((specimens_count, frames.shape[0], 88), dtype=int)
+        cloned_count = int(specimens_count*percent_to_clone)
+        new_count = specimens_count - cloned_count
+        # Clone
+        for n in range(0, cloned_count):
+            new_specimens[n] = specimens[np.random.choice(fitness_selection)]
+        # Always keep best specimen
+        new_specimens[0] = specimens[best_specimen]
+        # Load specimens from other instances
+        for instance_number in range(0, 8):
+            if instance_number == sufix:
+                continue
+            saved_filepath = filepath_base.format(instance_number, "{:06d}_{:06d}".format(start_frame, end_frame), "json")
+            if os.path.exists(saved_filepath):
+                best_saved_specimen = load_json(saved_filepath)
+                new_specimens[1+instance_number] = best_saved_specimen
+                print ("Loaded instance {} specimen".format(instance_number))
+        # Crossover
+        for n in range(cloned_count, specimens_count):
+            mixer_size = (specimens.shape[1], specimens.shape[2])
+            mixer = np.random.random_integers(low=0, high=1, size=mixer_size)
+            for nn in range(0, mixer.shape[0]):
+                if mixer[nn][0] == 1:
+                    mixer[nn] = np.ones(mixer.shape[1], dtype=int)
+                else:
+                    mixer[nn] = np.zeros(mixer.shape[1], dtype=int)
+            specimen_a = specimens[np.random.choice(fitness_selection)]
+            specimen_b = specimens[np.random.choice(fitness_selection)]
+
+            new_specimens[n] = (specimen_a*mixer)+(specimen_b*(1-mixer))
+        end = time.time()
+        elapsed = end - start
+        print ("Specimens Crossover in {:.2f} seconds".format(elapsed))
+
+        # Mutate
+        print ("Mutate Frames")
+        start = time.time()
+        mutations = generate_specimens(specimens_count, frames)
+        mutation_count = 0
+        total_count = 0
+        for mutations_index in range(cloned_count, specimens_count):
+            if not mutation_probability > rd.random():
+                continue
+            total_count += 1
+            if 0.5 > rd.random():
+                # Half of the time mutate several Frames
+                for frame_index in range(0, new_specimens.shape[1]):
+                    if mutation_probability > rd.random():
+                        mutation_count += 1
+                        new_specimens[mutations_index][frame_index] = mutations[mutations_index][frame_index]
+            else:
+                # Half of the time mutate only one Frame
+                mutation_count += 1
+                random_frame = rd.randint(0, mutations.shape[1]-1)
+                new_specimens[mutations_index][random_frame] = mutations[mutations_index][random_frame]
+        end = time.time()
+        elapsed = end - start
+        print ("{} Frames Mutated on {} Specimens in {:.2f} seconds".format(mutation_count, total_count, elapsed))
+
+        specimens = new_specimens
+    return specimens[best_specimen], left_hand_position[best_specimen][-1], right_hand_position[best_specimen][-1]
+
+## MAIN CODE
+
+do_help = False
+if len(sys.argv) == 1:
+    do_help = True
+else:
+    try:
+        sufix = int(sys.argv[1])
+        specimens_count = int(sys.argv[2])
+        percent_to_clone = float(sys.argv[3])
+        percent_to_select = float(sys.argv[4])
+        mutation_probability = float(sys.argv[5])
+    except:
+        do_help = True
+if do_help:
+    print ("Usage:")
+    print ("key2finger_evolutionary.py instance_number specimens_count percent_to_clone percent_to_select mutation_probability")
+    print ("Example: key2finger_evolutionary.py 1 50 0.5 0.2 0.05")
+    sys.exit()
+
+print ("Loading instance {:d}".format(sufix))
+
+#specimens_count = 50
+#percent_to_clone = 0.5
+#percent_to_select = 0.2
+#mutation_probability = 0.05
+
+
+
+# IMPORT DATA
+frames = open_midi('MIDI/Hummelflug.midigram', -1)
+print ("Frames: ", frames.shape[0])
+
+# ENCODE
+# Leave only frames with Key transitions
+# (Delete frame when equal to frame-1).
+n = 1
+while n < frames.shape[0]:
+    if np.array_equal(frames[n], frames[n-1]):
+        frames = np.delete(frames, (n), axis=0)
+    else:
+        n += 1
+print ("Reduced frames:", frames.shape[0])
+
+# Smooth:
+# If a key is released and presed again really quicly
+# remove that transition.
+frame_steps = 10
+processed_frames = None
+left_hand_position = None
+right_hand_position = None
+while processed_frames is None or processed_frames < frames.shape[0]:
+    if processed_frames is None:
+        start_frame = 0
+        end_frame = start_frame + frame_steps
+        processed_frames = 0
+    else:
+        start_frame += frame_steps
+        end_frame = start_frame + frame_steps
+    specimen, left_hand_position, right_hand_position = up_hill (sufix, frames, start_frame, end_frame, 100, left_hand_position, right_hand_position)
+    print ("Hand positions: {} {}".format(left_hand_position, right_hand_position))
+    #specimen, left_hand_position, right_hand_position = up_hill (sufix, frames, 100, 200, 5, left_hand_position[-1], right_hand_position[-1])
+    #print (left_hand_position[-1], right_hand_position[-1])
+    processed_frames +=  frame_steps
