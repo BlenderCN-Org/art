@@ -383,6 +383,44 @@ def fitness_eval(specimens, initial_left_hand_position, initial_right_hand_posit
                 if previous_frame_right_hand_position is not None:
                     right_hand_position = previous_frame_right_hand_position
 
+            # If we are using previous position for left hand
+            if left_hand_position is not None and len(left_hand_alternative_positions) == 0:
+                # And we are use current position for right hand
+                if right_hand_position is not None and len(right_hand_alternative_positions) > 0:
+                    hands_relative_position = left_hand_position - right_hand_position
+                    # If right hand is x keys to the right
+                    if hands_relative_position == -4: # 10 - 14
+                        left_hand_position -= 1
+                    elif hands_relative_position == -3:
+                        left_hand_position -= 2
+                    elif hands_relative_position == -2:
+                        left_hand_position -= 3
+                    elif hands_relative_position == -1:
+                        left_hand_position -= 4
+                    elif hands_relative_position == 0: # If right hand is on the same key as left hand
+                        left_hand_position -= 5
+                    elif hands_relative_position > 0: # If right hand is on the left
+                        left_hand_position = right_hand_position - 6
+
+            # If we are using previous position for right hand
+            if right_hand_position is not None and len(right_hand_alternative_positions) == 0:
+                # And we are use current position for left hand
+                if left_hand_position is not None and len(left_hand_alternative_positions) > 0:
+                    hands_relative_position = left_hand_position - right_hand_position
+                    # If right hand is x keys to the right
+                    if hands_relative_position == -4: # 10 - 14
+                        right_hand_position += 1
+                    elif hands_relative_position == -3:
+                        right_hand_position += 2
+                    elif hands_relative_position == -2:
+                        right_hand_position += 3
+                    elif hands_relative_position == -1:
+                        right_hand_position += 4
+                    elif hands_relative_position == 0: # If left hand is on the same key as right hand
+                        right_hand_position += 5
+                    elif hands_relative_position > 0: # If left hand is on the right
+                        right_hand_position = left_hand_position + 6
+
             # If we have information about left hand position
             # calculate traveled distance
             if left_hand_position is not None:
@@ -405,13 +443,18 @@ def fitness_eval(specimens, initial_left_hand_position, initial_right_hand_posit
             # add cost
             if left_hand_position is not None and right_hand_position is not None:
                 if left_hand_position > right_hand_position:
-                    mixing_score +=10
+                    mixing_score +=30
 
                 dist_between_hands = left_hand_position - right_hand_position
                 if dist_between_hands < 0:
                     dist_between_hands = dist_between_hands * -1
+                # If distance between hands is small, add cost
                 if dist_between_hands < 3:
+                    mixing_score +=5
+                elif dist_between_hands < 2:
                     mixing_score +=10
+                elif dist_between_hands < 1:
+                    mixing_score +=15
 
             # If we have information about left hand position
             # store it
@@ -747,20 +790,20 @@ frame_steps = 10
 processed_frames = None
 left_hand_position = None
 right_hand_position = None
-if 0:
-    while processed_frames is None or processed_frames < frames.shape[0]:
-        if processed_frames is None:
-            start_frame = 0
-            end_frame = start_frame + frame_steps
-            processed_frames = 0
-        else:
-            start_frame += frame_steps
-            end_frame = start_frame + frame_steps
-        specimen, left_hand_position, right_hand_position = up_hill (sufix, frames, start_frame, end_frame, 100, left_hand_position, right_hand_position)
-        print ("Hand positions: {} {}".format(left_hand_position, right_hand_position))
-        #specimen, left_hand_position, right_hand_position = up_hill (sufix, frames, 100, 200, 5, left_hand_position[-1], right_hand_position[-1])
-        #print (left_hand_position[-1], right_hand_position[-1])
-        processed_frames +=  frame_steps
+
+while processed_frames is None or processed_frames < frames.shape[0]:
+    if processed_frames is None:
+        start_frame = 0
+        end_frame = start_frame + frame_steps
+        processed_frames = 0
+    else:
+        start_frame += frame_steps
+        end_frame = start_frame + frame_steps
+    specimen, left_hand_position, right_hand_position = up_hill (sufix, frames, start_frame, end_frame, 100, left_hand_position, right_hand_position)
+    print ("Hand positions: {} {}".format(left_hand_position, right_hand_position))
+    #specimen, left_hand_position, right_hand_position = up_hill (sufix, frames, 100, 200, 5, left_hand_position[-1], right_hand_position[-1])
+    #print (left_hand_position[-1], right_hand_position[-1])
+    processed_frames +=  frame_steps
 
 fullframes_filepath_json = "full_frames.json"
 
