@@ -745,30 +745,41 @@ if len(sys.argv) == 1:
     do_help = True
 else:
     try:
-        sufix = int(sys.argv[1])
-        specimens_count = int(sys.argv[2])
-        percent_to_clone = float(sys.argv[3])
-        percent_to_select = float(sys.argv[4])
-        mutation_probability = float(sys.argv[5])
+        midigram_filepath = sys.argv[1]
+        octave_shift = int(sys.argv[2])
+        sufix = int(sys.argv[3])
+        frame_steps = int(sys.argv[4]) # Window
+        max_steps = int(sys.argv[5]) # Quality
+        specimens_count = int(sys.argv[6])
+        percent_to_clone = float(sys.argv[7])
+        percent_to_select = float(sys.argv[8])
+        mutation_probability = float(sys.argv[9])
     except:
         do_help = True
 if do_help:
     print ("Usage:")
-    print ("key2finger_evolutionary.py instance_number specimens_count percent_to_clone percent_to_select mutation_probability")
-    print ("Example: key2finger_evolutionary.py 1 50 0.5 0.2 0.05")
+    print ("  python3 key2finger_evolutionary.py midigram_filepath octave_shift frame_steps max_steps instance_number specimens_count percent_to_clone percent_to_select mutation_probability")
+    print ("    midigram_filepath:    File path of the midigram file containing the music (use midi2abs for convertion).")
+    print ("    octave_shift:         Traspose the song this many octaves to fit the 88k keyboard (negative or positive).")
+    print ("    frame_steps:          How many frames process at the same time. High-> too slow, Low-> bumpy hands.")
+    print ("    max_steps:            How many iterations calculate for each set of frames. Higher-> Better&Slower.")
+    print ("    instance_number:      ID of the instance for multiprocessing, from 0 to 7.")
+    print ("    specimens_count:      How many specimens to generate on each iteration. Higher-> Better&Slower.")
+    print ("    percent_to_clone:     Percent of specimens to clone without modification to the next iteration.")
+    print ("    percent_to_select:    Percent of specimens to select from the fitests to crossover.")
+    print ("    mutation_probability: Probability of mutations.")
+    print ()
+    print ("    Example: key2finger_evolutionary.py Hummelflug.midigram -1 10 20 1 50 0.5 0.2 0.05")
+    sys.exit()
+
+if not os.path.exists(midigram_filepath):
+    print ("Midigram file {} does not exists.".format(midigram_filepath))
     sys.exit()
 
 print ("Loading instance {:d}".format(sufix))
 
-#specimens_count = 50
-#percent_to_clone = 0.5
-#percent_to_select = 0.2
-#mutation_probability = 0.05
-
-
-
 # IMPORT DATA
-full_frames = open_midi('MIDI/Hummelflug.midigram', -1)
+full_frames = open_midi(midigram_filepath, octave_shift)
 print ("Frames: ", full_frames.shape[0])
 
 # ENCODE
@@ -786,7 +797,13 @@ print ("Reduced frames:", frames.shape[0])
 # Smooth:
 # If a key is released and presed again really quicly
 # remove that transition.
-frame_steps = 10
+
+# Save Full Frames
+fullframes_filepath_json = "full_frames.json"
+with open(fullframes_filepath_json, 'w', encoding='utf-8') as anim_file:
+    json.dump(full_frames.tolist(), anim_file, sort_keys=True, indent=4, separators=(',', ': '))
+
+
 processed_frames = None
 left_hand_position = None
 right_hand_position = None
@@ -799,13 +816,10 @@ while processed_frames is None or processed_frames < frames.shape[0]:
     else:
         start_frame += frame_steps
         end_frame = start_frame + frame_steps
-    specimen, left_hand_position, right_hand_position = up_hill (sufix, frames, start_frame, end_frame, 100, left_hand_position, right_hand_position)
+        if end_frame > frames.shape[0]:
+            end_frame = frames.shape[0]
+    specimen, left_hand_position, right_hand_position = up_hill (sufix, frames, start_frame, end_frame, max_steps, left_hand_position, right_hand_position)
     print ("Hand positions: {} {}".format(left_hand_position, right_hand_position))
     #specimen, left_hand_position, right_hand_position = up_hill (sufix, frames, 100, 200, 5, left_hand_position[-1], right_hand_position[-1])
     #print (left_hand_position[-1], right_hand_position[-1])
     processed_frames +=  frame_steps
-
-fullframes_filepath_json = "full_frames.json"
-
-with open(fullframes_filepath_json, 'w', encoding='utf-8') as anim_file:
-    json.dump(full_frames.tolist(), anim_file, sort_keys=True, indent=4, separators=(',', ': '))
