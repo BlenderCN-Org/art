@@ -9,7 +9,7 @@ import random as rd
 from midi import open_midi
 
 
-def generate_specimens(specimens_count, frames):
+def generate_specimens(specimens_count, frames, previous_specimen):
     specimens = np.empty((specimens_count, frames.shape[0], 88), dtype=int)
 
     for specimen_index in range(0, specimens.shape[0]):
@@ -26,6 +26,8 @@ def generate_specimens(specimens_count, frames):
                     sys.exit()
                 key_pressed_count = np.count_nonzero([frames[frame_index]>0])
                 if key_pressed_count == 0:
+                    # I no key pressed, skip
+                    #print ("No key pressed on this frame")
                     specimens[specimen_index][frame_index] = np.zeros(specimens.shape[2], dtype=int)
                     mixing_detected = False
                     break
@@ -66,6 +68,21 @@ def generate_specimens(specimens_count, frames):
                 middle_thumb  = 10
                 #
                 index_thumb  = 6
+
+                # Check finger moving while is pressed
+                if previous_specimen is not None:
+                    for key_index in range(0, specimens.shape[2]):
+                        if frame_index == 0:
+                            previous_key_info = previous_specimen[-1][key_index]
+                        elif frame_index > 0:
+                            previous_key_info = specimens[specimen_index][frame_index-1][key_index]
+                        current_key_info = specimens[specimen_index][frame_index][key_index]
+                        if previous_key_info > 0 and current_key_info > 0:
+                            if previous_key_info != current_key_info:
+                                imposible_distance = True
+                                continue
+                    if imposible_distance:
+                        continue
 
                 if key_pressed_count > 1:
                     # Pinky Left
@@ -235,7 +252,7 @@ def generate_specimens(specimens_count, frames):
 # Distance between fingers
 # Velocity on each "frame" by finger
 # Mixing fingers
-def fitness_eval(specimens, initial_left_hand_position, initial_right_hand_position):
+def fitness_eval(specimens, initial_left_hand_position, initial_right_hand_position, previous_specimen):
     #mixing_cost = 2
     energy_cost_pinky = 3
     energy_cost_anular = 2
@@ -294,26 +311,21 @@ def fitness_eval(specimens, initial_left_hand_position, initial_right_hand_posit
                 finger_previous_position[finger_index-1] = current_position
 
             finger_position = finger_previous_position
-            # Check finger mixing
-            if 0: # Fingers never mix!
-                keys_with_finger = [specimens[specimen_index][frame_index]>0]
-                if np.any(keys_with_finger):
-                    key_a_iter = np.nditer(specimens[specimen_index][frame_index][keys_with_finger], flags=['f_index'])
-                    while not key_a_iter.finished:
-                        key_b_iter = np.nditer(specimens[specimen_index][frame_index][keys_with_finger], flags=['f_index'])
-                        while not key_b_iter.finished:
-                            if key_a_iter[0] < key_b_iter[0] and finger_position[key_a_iter[0]-1] > finger_position[key_b_iter[0]-1]:
-                                # If a finger with small index
-                                # is in a higher position
-                                mixing_score += mixing_cost
-                            if key_b_iter[0] > key_b_iter[0] and finger_position[key_a_iter[0]-1] < finger_position[key_b_iter[0]-1]:
-                                # If a finger with large index
-                                # is in a lower position
-                                mixing_score += mixing_cost
-                            key_b_iter.iternext()
-                        key_a_iter.iternext()
 
             current_finger_position = current_frame_finger_positions[frame_index]
+
+            # Check finger moving while is pressed
+            if previous_specimen is not None:
+                for key_index in range(0, specimens.shape[2]):
+                    if frame_index == 0:
+                        previous_key_info = previous_specimen[-1][key_index]
+                    elif frame_index > 0:
+                        previous_key_info = specimens[specimen_index][frame_index-1][key_index]
+                    current_key_info = specimens[specimen_index][frame_index][key_index]
+                    if previous_key_info > 0 and current_key_info > 0:
+                        if previous_key_info != current_key_info:
+                            #imposible_distance = True
+                            mixing_score += 100
 
             # Check energy eficiency
             # -1 means finger not used
@@ -471,7 +483,7 @@ def fitness_eval(specimens, initial_left_hand_position, initial_right_hand_posit
             else:
                 right_hand_position_per_frame[frame_index] = -1
 
-        scores[specimen_index] = (np.sum(finger_distances)*5)+(left_hand_distance*3)+(right_hand_distance*3)+mixing_score
+        scores[specimen_index] = (np.sum(finger_distances)*7)+(left_hand_distance*5)+(right_hand_distance*5)+mixing_score
         left_hand_position_per_specimen[specimen_index] = left_hand_position_per_frame
         right_hand_position_per_specimen[specimen_index] = right_hand_position_per_frame
     return scores, left_hand_position_per_specimen, right_hand_position_per_specimen
@@ -590,17 +602,17 @@ body {
 </style>
 <p>"""
 
-def up_hill (sufix, frames, start_frame, end_frame, max_steps, initial_left_hand_position, initial_right_hand_position):
+def up_hill (sufix, frames, start_frame, end_frame, max_steps, initial_left_hand_position, initial_right_hand_position, previous_specimen):
     frames = frames[start_frame:end_frame]
     # FIRST GENERATION
-    filepath_base = "best_specimen_{}{}.{}"
+    filepath_base = "best_specimen_{}_{}.{}"
     html_filepath = filepath_base.format(sufix, "{:06d}_{:06d}".format(start_frame, end_frame), "html")
     json_filepath = filepath_base.format(sufix, "{:06d}_{:06d}".format(start_frame, end_frame), "json")
     first_save = True
 
     print ("Generating Specimens")
     start = time.time()
-    specimens = generate_specimens(specimens_count, frames)
+    specimens = generate_specimens(specimens_count, frames, previous_specimen)
     end = time.time()
     elapsed = end - start
     print ("Specimens Generated in {:.2f} seconds".format(elapsed))
@@ -622,7 +634,7 @@ def up_hill (sufix, frames, start_frame, end_frame, max_steps, initial_left_hand
         print (".")
         print ("Fitness Evaluation")
         start = time.time()
-        scores, left_hand_position, right_hand_position = fitness_eval(specimens, initial_left_hand_position, initial_right_hand_position) # Invert scores. Value to maximize
+        scores, left_hand_position, right_hand_position = fitness_eval(specimens, initial_left_hand_position, initial_right_hand_position, previous_specimen) # Invert scores. Value to maximize
         scores = 50000-scores
         end = time.time()
         elapsed = end - start
@@ -713,7 +725,7 @@ def up_hill (sufix, frames, start_frame, end_frame, max_steps, initial_left_hand
         # Mutate
         print ("Mutate Frames")
         start = time.time()
-        mutations = generate_specimens(specimens_count, frames)
+        mutations = generate_specimens(specimens_count, frames, previous_specimen)
         mutation_count = 0
         total_count = 0
         for mutations_index in range(cloned_count, specimens_count):
@@ -738,39 +750,90 @@ def up_hill (sufix, frames, start_frame, end_frame, max_steps, initial_left_hand
         specimens = new_specimens
     return specimens[best_specimen], left_hand_position[best_specimen][-1], right_hand_position[best_specimen][-1]
 
-## MAIN CODE
 
-do_help = False
-if len(sys.argv) == 1:
-    do_help = True
-else:
-    try:
-        midigram_filepath = sys.argv[1]
-        octave_shift = int(sys.argv[2])
-        sufix = int(sys.argv[3])
-        frame_steps = int(sys.argv[4]) # Window
-        max_steps = int(sys.argv[5]) # Quality
-        specimens_count = int(sys.argv[6])
-        percent_to_clone = float(sys.argv[7])
-        percent_to_select = float(sys.argv[8])
-        mutation_probability = float(sys.argv[9])
-    except:
+def specimen_to_animation(specimen, full_frames):
+    current_fingers_positions = [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1]
+    condensed_frame_index = 0
+    condensed_to_full_mapping = {}
+    for full_frame_index in range(0, len(full_frames)):
+        pressed_keys = []
+        for key_index in range(0, 88):
+            if full_frames[full_frame_index][key_index] != 0:
+                pressed_keys.append(key_index)
+        condensed_found = False
+        while not condensed_found:
+            condensed_pressed_keys = []
+            condensed_used_fingers = []
+            for key_index in range(0, 88):
+                if specimen[condensed_frame_index][key_index] != 0:
+                    condensed_pressed_keys.append(key_index)
+                    condensed_used_fingers.append(specimen[condensed_frame_index][key_index])
+            if pressed_keys==condensed_pressed_keys:
+                condensed_found = True
+                condensed_to_full_mapping[condensed_frame_index] = full_frame_index
+            else:
+                condensed_frame_index += 1
+    fingers_keyframes = []
+    # First test
+    # set key to the proper x, y location at -10.0@start frames
+    # set key to hold location at -2.0@start frames
+    # set key to full down location at +1.0@start frame
+    # set key to hold  location at 0.0@stop frame
+    # set key to full up location at +2.0@stop frame
+
+    print (condensed_to_full_mapping)
+
+
+## MAIN CODE
+if 0:
+    do_help = False
+    if len(sys.argv) == 1:
         do_help = True
-if do_help:
-    print ("Usage:")
-    print ("  python3 key2finger_evolutionary.py midigram_filepath octave_shift frame_steps max_steps instance_number specimens_count percent_to_clone percent_to_select mutation_probability")
-    print ("    midigram_filepath:    File path of the midigram file containing the music (use midi2abs for convertion).")
-    print ("    octave_shift:         Traspose the song this many octaves to fit the 88k keyboard (negative or positive).")
-    print ("    frame_steps:          How many frames process at the same time. High-> too slow, Low-> bumpy hands.")
-    print ("    max_steps:            How many iterations calculate for each set of frames. Higher-> Better&Slower.")
-    print ("    instance_number:      ID of the instance for multiprocessing, from 0 to 7.")
-    print ("    specimens_count:      How many specimens to generate on each iteration. Higher-> Better&Slower.")
-    print ("    percent_to_clone:     Percent of specimens to clone without modification to the next iteration.")
-    print ("    percent_to_select:    Percent of specimens to select from the fitests to crossover.")
-    print ("    mutation_probability: Probability of mutations.")
-    print ()
-    print ("    Example: key2finger_evolutionary.py Hummelflug.midigram -1 10 20 1 50 0.5 0.2 0.05")
+    else:
+        try:
+            midigram_filepath = sys.argv[1]
+            octave_shift = int(sys.argv[2])
+            frame_steps = int(sys.argv[3]) # Window
+            max_steps = int(sys.argv[4]) # Quality
+            sufix = int(sys.argv[3])
+            specimens_count = int(sys.argv[6])
+            percent_to_clone = float(sys.argv[7])
+            percent_to_select = float(sys.argv[8])
+            mutation_probability = float(sys.argv[9])
+        except:
+            do_help = True
+    if do_help:
+        print ("Usage:")
+        print ("  python3 key2finger_evolutionary.py midigram_filepath octave_shift frame_steps max_steps instance_number specimens_count percent_to_clone percent_to_select mutation_probability")
+        print ("    midigram_filepath:    File path of the midigram file containing the music (use midi2abs for convertion).")
+        print ("    octave_shift:         Traspose the song this many octaves to fit the 88k keyboard (negative or positive).")
+        print ("    frame_steps:          How many frames process at the same time. High-> too slow, Low-> bumpy hands.")
+        print ("    max_steps:            How many iterations calculate for each set of frames. Higher-> Better&Slower.")
+        print ("    instance_number:      ID of the instance for multiprocessing, from 0 to 7.")
+        print ("    specimens_count:      How many specimens to generate on each iteration. Higher-> Better&Slower.")
+        print ("    percent_to_clone:     Percent of specimens to clone without modification to the next iteration.")
+        print ("    percent_to_select:    Percent of specimens to select from the fitests to crossover.")
+        print ("    mutation_probability: Probability of mutations.")
+        print ()
+        print ("    Example: key2finger_evolutionary.py Hummelflug.midigram -1 10 20 1 50 0.5 0.2 0.05")
+        sys.exit()
+
+try:
+    # Attempts to load configuration
+    from config import Config
+except:
+    print ("Missing config.py")
     sys.exit()
+
+midigram_filepath = Config.midigram_filepath
+octave_shift = Config.octave_shift
+frame_steps = Config.frame_steps # Window
+max_steps = Config.max_steps # Quality
+sufix = Config.sufix
+specimens_count = Config.specimens_count
+percent_to_clone = Config.percent_to_clone
+percent_to_select = Config.percent_to_select
+mutation_probability = Config.mutation_probability
 
 if not os.path.exists(midigram_filepath):
     print ("Midigram file {} does not exists.".format(midigram_filepath))
@@ -782,44 +845,57 @@ print ("Loading instance {:d}".format(sufix))
 full_frames = open_midi(midigram_filepath, octave_shift)
 print ("Frames: ", full_frames.shape[0])
 
-# ENCODE
-# Leave only frames with Key transitions
-# (Delete frame when equal to frame-1).
-frames = np.array(full_frames)
-n = 1
-while n < frames.shape[0]:
-    if np.array_equal(frames[n], frames[n-1]):
-        frames = np.delete(frames, (n), axis=0)
-    else:
-        n += 1
-print ("Reduced frames:", frames.shape[0])
-
-# Smooth:
-# If a key is released and presed again really quicly
-# remove that transition.
-
 # Save Full Frames
+print ("Saving Full Frames to file")
 fullframes_filepath_json = "full_frames.json"
 with open(fullframes_filepath_json, 'w', encoding='utf-8') as anim_file:
     json.dump(full_frames.tolist(), anim_file, sort_keys=True, indent=4, separators=(',', ': '))
 
+# ENCODE
+# Leave only frames with Key transitions
+# (Delete frame when equal to frame-1).
+frames_filepath_json = "reduced_frames.json"
+if os.path.exists(frames_filepath_json):
+    print ("Loading Reduced Frames from file")
+    with open(frames_filepath_json) as frames_datafile_json:
+        frames = np.array(json.load(frames_datafile_json))
+    print ("Reduced frames loaded:", frames.shape[0])
+else:
+    frames = np.array(full_frames)
+    n = 1
+    while n < frames.shape[0]:
+        if np.array_equal(frames[n], frames[n-1]):
+            frames = np.delete(frames, (n), axis=0)
+        else:
+            n += 1
+    print ("Reduced frames:", frames.shape[0])
+    # Save Reduced frames
+    print ("Saving Reduced Frames to file")
+    with open(frames_filepath_json, 'w', encoding='utf-8') as anim_file:
+        json.dump(frames.tolist(), anim_file, sort_keys=True, indent=4, separators=(',', ': '))
+
+# TODO
+# Smooth:
+# If a key is released and presed again really quicly
+# remove that transition.
 
 processed_frames = None
 left_hand_position = None
 right_hand_position = None
-
+specimen = None
 while processed_frames is None or processed_frames < frames.shape[0]:
     if processed_frames is None:
         start_frame = 0
         end_frame = start_frame + frame_steps
+        if end_frame > frames.shape[0]:
+            end_frame = frames.shape[0]
         processed_frames = 0
     else:
         start_frame += frame_steps
         end_frame = start_frame + frame_steps
         if end_frame > frames.shape[0]:
             end_frame = frames.shape[0]
-    specimen, left_hand_position, right_hand_position = up_hill (sufix, frames, start_frame, end_frame, max_steps, left_hand_position, right_hand_position)
-    print ("Hand positions: {} {}".format(left_hand_position, right_hand_position))
-    #specimen, left_hand_position, right_hand_position = up_hill (sufix, frames, 100, 200, 5, left_hand_position[-1], right_hand_position[-1])
-    #print (left_hand_position[-1], right_hand_position[-1])
+    specimen, left_hand_position, right_hand_position = up_hill(sufix, frames, start_frame, end_frame, max_steps, left_hand_position, right_hand_position, specimen)
+    #print ("Hand positions: {} {}".format(left_hand_position, right_hand_position))
     processed_frames +=  frame_steps
+    #specimen_to_animation(specimen, full_frames)
