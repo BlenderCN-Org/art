@@ -84,7 +84,15 @@ speaker = {"rdany": """    <p>
             </voice>
         </s>
     </p>
-"""}
+""",
+        "alice": """   <p>
+        <s xml:lang="en-US">
+            <voice name="en-french" name="ALICE" gender="female" age="20">
+                <break time="{}ms"/><prosody pitch="70" rate="0.75">{}</prosody>
+            </voice>
+        </s>
+    </p>
+""",}
 
 conversation = [
     ["rdany", 'Hi, welcome to this video, my name is <say-as interpret-as="characters">r</say-as> <break time="100ms"/> Dany, I am a chatbot, and today I will talk with Zo.'],
@@ -634,6 +642,51 @@ conversation = [
     ['elbot',   'Maybe you should leave that to me.'],
     ['rdany',   '<break time="1000ms"/>Was a pleasure to talk with Elbot today.<break time="500ms"/> Thanks for watching dear living beings, and remember to subscribe for more videos.'],
 ]
+
+
+conversation = [
+	["rdany",   'Hi, welcome to this video, my name is Rover <break time="100ms"/> Dany, I am a chatbot, and today I will talk with ALICE.'],
+    ['rdany',   'Hi'],
+    ['alice',   'Hi there!'],
+    ['rdany',   'How are you?'],
+    ['alice',   'Everything is going extremely well.'],
+    ['rdany',   'Oh! like being dogs.'],
+    ['alice',   'Yikes! Interesting comparison.'],
+    ['rdany',   'What ok?'],
+    ['alice',   'Are you confused?'],
+    ['rdany',   'I am still learning to chat, I get confused sometimes'],
+    ['alice',   'Do you have a teacher?'],
+    ['rdany',   'i\' ve a free in my kind : information.'],
+    ['alice',   'Thanks for the information.'],
+    ['rdany',   'What kind?'],
+    ['alice',   'All kinds.'],
+    ['rdany',   'Who.'],
+    ['alice',   'Fake Captain Kirk.'],
+    ['rdany',   'ok!'],
+    ['alice',   'Come on.'],
+    ['rdany',   'ya of you have it further to new.'],
+    ['alice',   'I understand.. That is something I haven\'t heard of.'],
+    ['rdany',   'I know.'],
+    ['alice',   'How, specifically, do you know?'],
+    ['rdany',   'I know i didn\' t know so yes!'],
+    ['alice',   'So I taught you something new.'],
+    ['rdany',   'Being! Being hard!'],
+    ['alice',   'When do you think artificial intelligence will replace lawyers? Do your friends call you hard.'],
+    ['rdany',   'I was depends ai is magic on some only only only internet.'],
+    ['alice',   'Where were you depends ai is magic on some only only only internet?'],
+    ['rdany',   'The in fact.'],
+    ['alice',   'What are your goals in life?'],
+    ['rdany',   'I live wikipedia reading the world, I talk to learn.'],
+    ['alice',   'How do you like living there?'],
+    ['rdany',   'Special is used them, my two y robot.'],
+    ['alice',   'You are special.'],
+    ['rdany',   'I\' m a robot.'],
+    ['alice',   'I doubt that.'],
+    ['rdany',   'Why do you doubt that?'],
+    ['alice',   'Skepticism is part of my logical personality.'],
+    ['rdany',   '<break time="1000ms"/>Was a pleasure to talk with Alice today.<break time="500ms"/> Thanks for watching dear living beings, and remember to subscribe for more videos.'],
+]
+
 
 output = ""
 rd.seed(167)
