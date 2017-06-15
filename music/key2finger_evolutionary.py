@@ -9,241 +9,320 @@ import random as rd
 from midi import open_midi
 
 
-def generate_specimens(specimens_count, frames, previous_specimen):
+def generate_specimens(specimens_count, frames, condensed_to_full_mapping, previous_specimen, start_frame, end_frame):
     specimens = np.empty((specimens_count, frames.shape[0], 88), dtype=int)
 
     for specimen_index in range(0, specimens.shape[0]):
-        for frame_index in range(0, specimens.shape[1]):
-            mixing_detected = True
-            imposible_distance = True
-            try_count = 0
-            while mixing_detected or imposible_distance:
-                try_count += 1
-                if try_count > 100000:
-                    print ("Too many attempts to generate finger position on frame {}".format(frame_index))
-                    print ("Last status:")
-                    print (current_frame_finger_positions)
-                    sys.exit()
-                key_pressed_count = np.count_nonzero([frames[frame_index]>0])
-                if key_pressed_count == 0:
-                    # I no key pressed, skip
-                    #print ("No key pressed on this frame")
-                    specimens[specimen_index][frame_index] = np.zeros(specimens.shape[2], dtype=int)
+        impossible_specimen = True
+        while impossible_specimen:
+            finger_positions_by_frame = [None for _ in range(0, specimens.shape[1])]
+            for frame_index in range(0, specimens.shape[1]):
+                mixing_detected = True
+                impossible_distance = True
+                impossible_speed = True
+                impossible_specimen = False
+                try_count = 0
+                while mixing_detected or impossible_distance or impossible_speed:
+                    try_count += 1
+                    if try_count > 100000:
+                        print ("Too many attempts to generate finger position on frame {}".format(frame_index))
+                        print ("Last status:")
+                        print (current_frame_finger_positions)
+                        if impossible_distance:
+                            print ("Impossible Distance")
+                        if mixing_detected:
+                            print ("Mixing Detected")
+                        if impossible_speed:
+                            print ("Impossible Speed")
+                        impossible_specimen = True
+                        print ("Rebuilding specimen from scratch")
+                        break
+                    impossible_distance = False
+                    impossible_speed = False
                     mixing_detected = False
-                    break
-                elif key_pressed_count == 1:
-                    finger_distribution = np.empty(10, dtype=int)
-                    finger_distribution.fill(rd.randint(1, 10))
-                elif key_pressed_count > 1:
-                    finger_distribution = np.zeros(key_pressed_count, dtype=int)
-                    last_random = 0
-                    for fd in range(0, finger_distribution.shape[0]):
-                        last_random = rd.randint(last_random+1, 10-(key_pressed_count-fd)+1)
-                        finger_distribution[fd] = last_random
-                    finger_distribution = np.roll(finger_distribution, rd.randint(0, key_pressed_count))
-                specimens[specimen_index][frame_index] = np.array(frames[frame_index])
-                current_frame_finger_positions = np.zeros(10, dtype=int)
-                nf=0
-                it = np.nditer(specimens[specimen_index][frame_index], flags=['f_index'])
-                while not it.finished:
-                    if specimens[specimen_index][frame_index][it.index]>0:
-                        specimens[specimen_index][frame_index][it.index] = finger_distribution[nf]
-                        current_frame_finger_positions[finger_distribution[nf]-1] = it.index+1
-                        nf+=1
-                        if nf >= key_pressed_count:
-                            break # Stop asigning fingers
-                    it.iternext()
-                # Check imposible distances
-                imposible_distance = False
-                pinky_anular = 4
-                pinky_middle = 8
-                pinky_index  = 12
-                pinky_thumb  = 18
-                #
-                anular_middle = 4
-                anular_index  = 8
-                anular_thumb  = 14
-                #
-                middle_index  = 4
-                middle_thumb  = 10
-                #
-                index_thumb  = 6
+                    key_pressed_count = np.count_nonzero([frames[frame_index]>0])
+                    if key_pressed_count == 0:
+                        # If no key pressed, skip
+                        specimens[specimen_index][frame_index] = np.zeros(specimens.shape[2], dtype=int)
+                        finger_positions_by_frame[frame_index] = np.zeros(10, dtype=int)
+                        break # Skip this Frame
+                    elif key_pressed_count == 1:
+                        finger_distribution = np.empty(10, dtype=int)
+                        finger_distribution.fill(rd.randint(1, 10))
+                    elif key_pressed_count > 1:
+                        finger_distribution = np.zeros(key_pressed_count, dtype=int)
+                        last_random = 0
+                        for fd in range(0, finger_distribution.shape[0]):
+                            last_random = rd.randint(last_random+1, 10-(key_pressed_count-fd)+1)
+                            finger_distribution[fd] = last_random
+                        finger_distribution = np.roll(finger_distribution, rd.randint(0, key_pressed_count))
+                    specimens[specimen_index][frame_index] = np.array(frames[frame_index])
+                    current_frame_finger_positions = np.zeros(10, dtype=int)
+                    nf=0
+                    it = np.nditer(specimens[specimen_index][frame_index], flags=['f_index'])
+                    while not it.finished:
+                        if specimens[specimen_index][frame_index][it.index]>0:
+                            specimens[specimen_index][frame_index][it.index] = finger_distribution[nf]
+                            current_frame_finger_positions[finger_distribution[nf]-1] = it.index+1
+                            nf+=1
+                            if nf >= key_pressed_count:
+                                break # Stop asigning fingers
+                        it.iternext()
+                    # Check imposible distances
+                    pinky_anular = 4
+                    pinky_middle = 8
+                    pinky_index  = 12
+                    pinky_thumb  = 18
+                    #
+                    anular_middle = 4
+                    anular_index  = 8
+                    anular_thumb  = 14
+                    #
+                    middle_index  = 4
+                    middle_thumb  = 10
+                    #
+                    index_thumb  = 6
 
-                # Check finger moving while is pressed
-                if previous_specimen is not None:
+                    # Check finger moving while is pressed
                     for key_index in range(0, specimens.shape[2]):
-                        if frame_index == 0:
+                        if previous_specimen is not None and frame_index == 0:
                             previous_key_info = previous_specimen[-1][key_index]
                         elif frame_index > 0:
                             previous_key_info = specimens[specimen_index][frame_index-1][key_index]
+                        else:
+                            continue
                         current_key_info = specimens[specimen_index][frame_index][key_index]
                         if previous_key_info > 0 and current_key_info > 0:
                             if previous_key_info != current_key_info:
-                                imposible_distance = True
-                                continue
-                    if imposible_distance:
-                        continue
+                                # Atempt fixing:
+                                already_in_use = False
+                                # Is the finger already in use by another key?
+                                for key_index_b in range (0, specimens.shape[2]):
+                                    if specimens[specimen_index][frame_index][key_index_b] == previous_key_info:
+                                        already_in_use = True
+                                if already_in_use:
+                                    # Cant Fix
+                                    mixing_detected = True
+                                    continue
+                                else:
+                                    # Fix
+                                    specimens[specimen_index][frame_index][key_index] = previous_key_info
+                        if mixing_detected:
+                            continue
 
-                if key_pressed_count > 1:
-                    # Pinky Left
-                    if current_frame_finger_positions[0] > 0:
-                        # Pinky Anular Left
+                    if key_pressed_count > 1:
+                        # Pinky Left
+                        if current_frame_finger_positions[0] > 0:
+                            # Pinky Anular Left
+                            if current_frame_finger_positions[1] > 0:
+                                if current_frame_finger_positions[0] < current_frame_finger_positions[1]-pinky_anular:
+                                    impossible_distance = True
+                                    continue
+                            # Pinky Middle Left
+                            if current_frame_finger_positions[2] > 0:
+                                if current_frame_finger_positions[0] < current_frame_finger_positions[2]-pinky_middle:
+                                    impossible_distance = True
+                                    continue
+                            # Pinky Index Left
+                            if current_frame_finger_positions[3] > 0:
+                                if current_frame_finger_positions[0] < current_frame_finger_positions[3]-pinky_index:
+                                    impossible_distance = True
+                                    continue
+                            # Pinky Thumb Left
+                            if current_frame_finger_positions[4] > 0:
+                                if current_frame_finger_positions[0] < current_frame_finger_positions[4]-pinky_thumb:
+                                    impossible_distance = True
+                                    continue
+                        # Anular Left
                         if current_frame_finger_positions[1] > 0:
-                            if current_frame_finger_positions[0] < current_frame_finger_positions[1]-pinky_anular:
-                                imposible_distance = True
-                                continue
-                        # Pinky Middle Left
+                            # Anular Middle Left
+                            if current_frame_finger_positions[2] > 0:
+                                if current_frame_finger_positions[1] < current_frame_finger_positions[2]-anular_middle:
+                                    impossible_distance = True
+                                    continue
+                            # Anular Index Left
+                            if current_frame_finger_positions[3] > 0:
+                                if current_frame_finger_positions[1] < current_frame_finger_positions[3]-anular_index:
+                                    impossible_distance = True
+                                    continue
+                            # Anular Thumb Left
+                            if current_frame_finger_positions[4] > 0:
+                                if current_frame_finger_positions[1] < current_frame_finger_positions[4]-anular_thumb:
+                                    impossible_distance = True
+                                    continue
+                        # Middle Left
                         if current_frame_finger_positions[2] > 0:
-                            if current_frame_finger_positions[0] < current_frame_finger_positions[2]-pinky_middle:
-                                imposible_distance = True
-                                continue
-                        # Pinky Index Left
+                            # Middle Index Left
+                            if current_frame_finger_positions[3] > 0:
+                                if current_frame_finger_positions[2] < current_frame_finger_positions[3]-middle_index:
+                                    impossible_distance = True
+                                    continue
+                            # Middle Thumb Left
+                            if current_frame_finger_positions[4] > 0:
+                                if current_frame_finger_positions[2] < current_frame_finger_positions[4]-middle_thumb:
+                                    impossible_distance = True
+                                    continue
+                        # Index Left
                         if current_frame_finger_positions[3] > 0:
-                            if current_frame_finger_positions[0] < current_frame_finger_positions[3]-pinky_index:
-                                imposible_distance = True
-                                continue
-                        # Pinky Thumb Left
-                        if current_frame_finger_positions[4] > 0:
-                            if current_frame_finger_positions[0] < current_frame_finger_positions[4]-pinky_thumb:
-                                imposible_distance = True
-                                continue
-                    # Anular Left
-                    if current_frame_finger_positions[1] > 0:
-                        # Anular Middle Left
-                        if current_frame_finger_positions[2] > 0:
-                            if current_frame_finger_positions[1] < current_frame_finger_positions[2]-anular_middle:
-                                imposible_distance = True
-                                continue
-                        # Anular Index Left
-                        if current_frame_finger_positions[3] > 0:
-                            if current_frame_finger_positions[1] < current_frame_finger_positions[3]-anular_index:
-                                imposible_distance = True
-                                continue
-                        # Anular Thumb Left
-                        if current_frame_finger_positions[4] > 0:
-                            if current_frame_finger_positions[1] < current_frame_finger_positions[4]-anular_thumb:
-                                imposible_distance = True
-                                continue
-                    # Middle Left
-                    if current_frame_finger_positions[2] > 0:
-                        # Middle Index Left
-                        if current_frame_finger_positions[3] > 0:
-                            if current_frame_finger_positions[2] < current_frame_finger_positions[3]-middle_index:
-                                imposible_distance = True
-                                continue
-                        # Middle Thumb Left
-                        if current_frame_finger_positions[4] > 0:
-                            if current_frame_finger_positions[2] < current_frame_finger_positions[4]-middle_thumb:
-                                imposible_distance = True
-                                continue
-                    # Index Left
-                    if current_frame_finger_positions[3] > 0:
-                        # Index Thumb Left
-                        if current_frame_finger_positions[4] > 0:
-                            if current_frame_finger_positions[3] < current_frame_finger_positions[4]-index_thumb:
-                                imposible_distance = True
-                                continue
+                            # Index Thumb Left
+                            if current_frame_finger_positions[4] > 0:
+                                if current_frame_finger_positions[3] < current_frame_finger_positions[4]-index_thumb:
+                                    impossible_distance = True
+                                    continue
 
-                    # Pinky Right
-                    if current_frame_finger_positions[5] > 0:
-                        # Pinky Anular Right
+                        # Pinky Right
+                        if current_frame_finger_positions[5] > 0:
+                            # Pinky Anular Right
+                            if current_frame_finger_positions[6] > 0:
+                                if current_frame_finger_positions[5] < current_frame_finger_positions[6]-pinky_anular:
+                                    impossible_distance = True
+                                    continue
+                            # Pinky Middle Right
+                            if current_frame_finger_positions[7] > 0:
+                                if current_frame_finger_positions[5] < current_frame_finger_positions[7]-pinky_middle:
+                                    impossible_distance = True
+                                    continue
+                            # Pinky Index Right
+                            if current_frame_finger_positions[8] > 0:
+                                if current_frame_finger_positions[5] < current_frame_finger_positions[8]-pinky_index:
+                                    impossible_distance = True
+                                    continue
+                            # Pinky Thumb Right
+                            if current_frame_finger_positions[9] > 0:
+                                if current_frame_finger_positions[5] < current_frame_finger_positions[9]-pinky_thumb:
+                                    impossible_distance = True
+                                    continue
+                        # Anular Right
                         if current_frame_finger_positions[6] > 0:
-                            if current_frame_finger_positions[5] < current_frame_finger_positions[6]-pinky_anular:
-                                imposible_distance = True
-                                continue
-                        # Pinky Middle Right
+                            # Anular Middle Right
+                            if current_frame_finger_positions[7] > 0:
+                                if current_frame_finger_positions[6] < current_frame_finger_positions[7]-anular_middle:
+                                    impossible_distance = True
+                                    continue
+                            # Anular Index Right
+                            if current_frame_finger_positions[8] > 0:
+                                if current_frame_finger_positions[6] < current_frame_finger_positions[8]-anular_index:
+                                    impossible_distance = True
+                                    continue
+                            # Anular Thumb Right
+                            if current_frame_finger_positions[9] > 0:
+                                if current_frame_finger_positions[6] < current_frame_finger_positions[9]-anular_thumb:
+                                    impossible_distance = True
+                                    continue
+                        # Middle Right
                         if current_frame_finger_positions[7] > 0:
-                            if current_frame_finger_positions[5] < current_frame_finger_positions[7]-pinky_middle:
-                                imposible_distance = True
-                                continue
-                        # Pinky Index Right
+                            # Middle Index Right
+                            if current_frame_finger_positions[8] > 0:
+                                if current_frame_finger_positions[7] < current_frame_finger_positions[8]-middle_index:
+                                    impossible_distance = True
+                                    continue
+                            # Middle Thumb Right
+                            if current_frame_finger_positions[9] > 0:
+                                if current_frame_finger_positions[7] < current_frame_finger_positions[9]-middle_thumb:
+                                    impossible_distance = True
+                                    continue
+                        # Index Right
                         if current_frame_finger_positions[8] > 0:
-                            if current_frame_finger_positions[5] < current_frame_finger_positions[8]-pinky_index:
-                                imposible_distance = True
-                                continue
-                        # Pinky Thumb Right
-                        if current_frame_finger_positions[9] > 0:
-                            if current_frame_finger_positions[5] < current_frame_finger_positions[9]-pinky_thumb:
-                                imposible_distance = True
-                                continue
-                    # Anular Right
-                    if current_frame_finger_positions[6] > 0:
-                        # Anular Middle Right
-                        if current_frame_finger_positions[7] > 0:
-                            if current_frame_finger_positions[6] < current_frame_finger_positions[7]-anular_middle:
-                                imposible_distance = True
-                                continue
-                        # Anular Index Right
-                        if current_frame_finger_positions[8] > 0:
-                            if current_frame_finger_positions[6] < current_frame_finger_positions[8]-anular_index:
-                                imposible_distance = True
-                                continue
-                        # Anular Thumb Right
-                        if current_frame_finger_positions[9] > 0:
-                            if current_frame_finger_positions[6] < current_frame_finger_positions[9]-anular_thumb:
-                                imposible_distance = True
-                                continue
-                    # Middle Right
-                    if current_frame_finger_positions[7] > 0:
-                        # Middle Index Right
-                        if current_frame_finger_positions[8] > 0:
-                            if current_frame_finger_positions[7] < current_frame_finger_positions[8]-middle_index:
-                                imposible_distance = True
-                                continue
-                        # Middle Thumb Right
-                        if current_frame_finger_positions[9] > 0:
-                            if current_frame_finger_positions[7] < current_frame_finger_positions[9]-middle_thumb:
-                                imposible_distance = True
-                                continue
-                    # Index Right
-                    if current_frame_finger_positions[8] > 0:
-                        # Index Thumb Right
-                        if current_frame_finger_positions[9] > 0:
-                            if current_frame_finger_positions[8] < current_frame_finger_positions[9]-index_thumb:
-                                imposible_distance = True
-                                continue
+                            # Index Thumb Right
+                            if current_frame_finger_positions[9] > 0:
+                                if current_frame_finger_positions[8] < current_frame_finger_positions[9]-index_thumb:
+                                    impossible_distance = True
+                                    continue
 
-                # Check mixing
-                jump_count = 0
-                current_hand = None
-                previous_hand = None
-                for n_key in range(0, specimens.shape[2]):
-                    if specimens[specimen_index][frame_index][n_key] > 0 and specimens[specimen_index][frame_index][n_key] < 6:
-                        current_hand = 0
-                    elif specimens[specimen_index][frame_index][n_key] > 5:
-                        current_hand = 1
-                    if previous_hand is None:
-                        previous_hand = current_hand
-                    if previous_hand != current_hand:
-                        jump_count += 1
-                        previous_hand = current_hand
-                    if jump_count > 1:
-                        mixing_detected = True
-                        break # Try new iteration
-                if jump_count < 2:
-                    mixing_detected = False
-
-                # Check mixing left hand
-                for fi in range(0, 5):
-                    for fii in range(fi, 5):
-                        if current_frame_finger_positions[fii] == 0 or current_frame_finger_positions[fi] == 0:
-                            continue
-                        if current_frame_finger_positions[fii] < current_frame_finger_positions[fi]:
+                    # Check mixing
+                    jump_count = 0
+                    current_hand = None
+                    previous_hand = None
+                    for n_key in range(0, specimens.shape[2]):
+                        if specimens[specimen_index][frame_index][n_key] > 0 and specimens[specimen_index][frame_index][n_key] < 6:
+                            current_hand = 0
+                        elif specimens[specimen_index][frame_index][n_key] > 5:
+                            current_hand = 1
+                        if previous_hand is None:
+                            previous_hand = current_hand
+                        if previous_hand != current_hand:
+                            jump_count += 1
+                            previous_hand = current_hand
+                        if jump_count > 1:
                             mixing_detected = True
-                            break
-                    if mixing_detected:
-                        break
-                # Check mixing right hand
-                for fi in range(5, 10):
-                    for fii in range(fi, 10):
-                        if current_frame_finger_positions[fii] == 0 or current_frame_finger_positions[fi] == 0:
-                            continue
-                        if current_frame_finger_positions[fii] < current_frame_finger_positions[fi]:
-                            mixing_detected = True
-                            break
-                    if mixing_detected:
-                        break
+                            break # Try new iteration
+                    #if mixing_detected:
+                    #    continue # Restart specimen frame generator while loop
+                    if jump_count < 2:
+                        mixing_detected = False
 
+                    # Check mixing left hand
+                    for fi in range(0, 5):
+                        for fii in range(fi, 5):
+                            if current_frame_finger_positions[fii] == 0 or current_frame_finger_positions[fi] == 0:
+                                continue
+                            if current_frame_finger_positions[fii] < current_frame_finger_positions[fi]:
+                                mixing_detected = True
+                                break
+                        if mixing_detected:
+                            break
+                    #if mixing_detected:
+                    #    continue # Restart specimen frame generator while loop
+                    # Check mixing right hand
+                    for fi in range(5, 10):
+                        for fii in range(fi, 10):
+                            if current_frame_finger_positions[fii] == 0 or current_frame_finger_positions[fi] == 0:
+                                continue
+                            if current_frame_finger_positions[fii] < current_frame_finger_positions[fi]:
+                                mixing_detected = True
+                                break
+                        if mixing_detected:
+                            break
+                    #if mixing_detected:
+                    #    continue # Restart specimen frame generator while loop
+
+                    # Check imposible finger speed
+                    # TODO find the previous position of a given finger,
+                    # not its position on the previous frame
+                    normalized_frame = start_frame + frame_index
+                    for finger_index in range(0, 10):
+                        if normalized_frame == 0:
+                            break
+                        previous_pos_ = None
+                        previous_frame_ = None
+                        previous_specimen_frames_count = int((start_frame / (end_frame - start_frame))*(end_frame - start_frame))
+                        for frame_countup in range(0, previous_specimen_frames_count+frame_index):
+                            frame_countdown = (previous_specimen_frames_count+frame_index)-frame_countup - 1
+                            if frame_countdown >= previous_specimen_frames_count:
+                                # This Specimen
+                                pos = finger_positions_by_frame[frame_countdown-start_frame][finger_index]
+                                if pos > 0:
+                                    previous_pos_ = pos
+                                    previous_frame_ = frame_countdown
+                                    break
+                            else:
+                                # Previous Specimen
+                                previous_specimen_frame_index = previous_specimen_frames_count - frame_countdown - 1
+                                if previous_specimen_frame_index >= end_frame - start_frame:
+                                    break
+                                for key_index in range(0, previous_specimen.shape[1]):
+                                    if previous_specimen[previous_specimen_frame_index][key_index] == finger_index:
+                                        previous_pos_ = key_index
+                                        previous_frame_ = frame_countdown
+                                        break
+                        if previous_pos_ is None:
+                            break
+                        previous_full_frame_ = condensed_to_full_mapping[previous_frame_]
+                        current_pos_ = current_frame_finger_positions[finger_index]
+                        current_full_frame_ = condensed_to_full_mapping[normalized_frame]
+
+                        if previous_pos_ > 0 and current_pos_ > 0 and previous_pos_ != current_pos_:
+                            dist_ = previous_pos_ - current_pos_
+                            if dist_ < 0:
+                                dist_ = dist_ * -1
+                            speed_ = dist_ / (current_full_frame_-previous_full_frame_)
+                            if speed_ > 0.1:
+                                impossible_speed = True
+
+                    finger_positions_by_frame[frame_index] = current_frame_finger_positions
+
+                if impossible_specimen:
+                    break
     return specimens
 
 
@@ -253,20 +332,11 @@ def generate_specimens(specimens_count, frames, previous_specimen):
 # Velocity on each "frame" by finger
 # Mixing fingers
 def fitness_eval(specimens, initial_left_hand_position, initial_right_hand_position, previous_specimen):
-    #mixing_cost = 2
     energy_cost_pinky = 3
     energy_cost_anular = 2
     energy_cost_middle = 1
     energy_cost_index = 0
     energy_cost_thumb = 0
-    #pinky_min = 6  # Left
-    #pinky_max = 2  # Right
-    #ring_min = 4   # Left
-    #ring_max = 1   # Right
-    #index_min = 6  # Right
-    #index_max = 1  # Left
-    #thumb_min = 10 # Right
-    #thumb_max = -2 #4  # Left
 
     scores = np.empty(specimens.shape[0], dtype=int)
     left_hand_position_per_specimen  = np.empty([specimens.shape[0], specimens.shape[1]], dtype=int)
@@ -315,17 +385,18 @@ def fitness_eval(specimens, initial_left_hand_position, initial_right_hand_posit
             current_finger_position = current_frame_finger_positions[frame_index]
 
             # Check finger moving while is pressed
-            if previous_specimen is not None:
-                for key_index in range(0, specimens.shape[2]):
-                    if frame_index == 0:
-                        previous_key_info = previous_specimen[-1][key_index]
-                    elif frame_index > 0:
-                        previous_key_info = specimens[specimen_index][frame_index-1][key_index]
-                    current_key_info = specimens[specimen_index][frame_index][key_index]
-                    if previous_key_info > 0 and current_key_info > 0:
-                        if previous_key_info != current_key_info:
-                            #imposible_distance = True
-                            mixing_score += 100
+            for key_index in range(0, specimens.shape[2]):
+                if previous_specimen is not None and frame_index == 0:
+                    previous_key_info = previous_specimen[-1][key_index]
+                elif frame_index > 0:
+                    previous_key_info = specimens[specimen_index][frame_index-1][key_index]
+                else:
+                    continue
+                current_key_info = specimens[specimen_index][frame_index][key_index]
+                if previous_key_info > 0 and current_key_info > 0:
+                    if previous_key_info != current_key_info:
+                        #print ("mixing_score += 1000")
+                        mixing_score += 1000
 
             # Check energy eficiency
             # -1 means finger not used
@@ -602,7 +673,7 @@ body {
 </style>
 <p>"""
 
-def up_hill (sufix, frames, start_frame, end_frame, max_steps, initial_left_hand_position, initial_right_hand_position, previous_specimen):
+def up_hill (sufix, frames, condensed_to_full_mapping, start_frame, end_frame, max_steps, initial_left_hand_position, initial_right_hand_position, previous_specimen):
     frames = frames[start_frame:end_frame]
     # FIRST GENERATION
     filepath_base = "best_specimen_{}_{}.{}"
@@ -612,7 +683,7 @@ def up_hill (sufix, frames, start_frame, end_frame, max_steps, initial_left_hand
 
     print ("Generating Specimens")
     start = time.time()
-    specimens = generate_specimens(specimens_count, frames, previous_specimen)
+    specimens = generate_specimens(specimens_count, frames, condensed_to_full_mapping, previous_specimen, start_frame, end_frame)
     end = time.time()
     elapsed = end - start
     print ("Specimens Generated in {:.2f} seconds".format(elapsed))
@@ -725,7 +796,7 @@ def up_hill (sufix, frames, start_frame, end_frame, max_steps, initial_left_hand
         # Mutate
         print ("Mutate Frames")
         start = time.time()
-        mutations = generate_specimens(specimens_count, frames, previous_specimen)
+        mutations = generate_specimens(specimens_count, frames, condensed_to_full_mapping, previous_specimen, start_frame, end_frame)
         mutation_count = 0
         total_count = 0
         for mutations_index in range(cloned_count, specimens_count):
@@ -752,72 +823,10 @@ def up_hill (sufix, frames, start_frame, end_frame, max_steps, initial_left_hand
 
 
 def specimen_to_animation(specimen, full_frames):
-    current_fingers_positions = [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1]
-    condensed_frame_index = 0
-    condensed_to_full_mapping = {}
-    for full_frame_index in range(0, len(full_frames)):
-        pressed_keys = []
-        for key_index in range(0, 88):
-            if full_frames[full_frame_index][key_index] != 0:
-                pressed_keys.append(key_index)
-        condensed_found = False
-        while not condensed_found:
-            condensed_pressed_keys = []
-            condensed_used_fingers = []
-            for key_index in range(0, 88):
-                if specimen[condensed_frame_index][key_index] != 0:
-                    condensed_pressed_keys.append(key_index)
-                    condensed_used_fingers.append(specimen[condensed_frame_index][key_index])
-            if pressed_keys==condensed_pressed_keys:
-                condensed_found = True
-                condensed_to_full_mapping[condensed_frame_index] = full_frame_index
-            else:
-                condensed_frame_index += 1
-    fingers_keyframes = []
-    # First test
-    # set key to the proper x, y location at -10.0@start frames
-    # set key to hold location at -2.0@start frames
-    # set key to full down location at +1.0@start frame
-    # set key to hold  location at 0.0@stop frame
-    # set key to full up location at +2.0@stop frame
-
-    print (condensed_to_full_mapping)
+    pass
 
 
 ## MAIN CODE
-if 0:
-    do_help = False
-    if len(sys.argv) == 1:
-        do_help = True
-    else:
-        try:
-            midigram_filepath = sys.argv[1]
-            octave_shift = int(sys.argv[2])
-            frame_steps = int(sys.argv[3]) # Window
-            max_steps = int(sys.argv[4]) # Quality
-            sufix = int(sys.argv[3])
-            specimens_count = int(sys.argv[6])
-            percent_to_clone = float(sys.argv[7])
-            percent_to_select = float(sys.argv[8])
-            mutation_probability = float(sys.argv[9])
-        except:
-            do_help = True
-    if do_help:
-        print ("Usage:")
-        print ("  python3 key2finger_evolutionary.py midigram_filepath octave_shift frame_steps max_steps instance_number specimens_count percent_to_clone percent_to_select mutation_probability")
-        print ("    midigram_filepath:    File path of the midigram file containing the music (use midi2abs for convertion).")
-        print ("    octave_shift:         Traspose the song this many octaves to fit the 88k keyboard (negative or positive).")
-        print ("    frame_steps:          How many frames process at the same time. High-> too slow, Low-> bumpy hands.")
-        print ("    max_steps:            How many iterations calculate for each set of frames. Higher-> Better&Slower.")
-        print ("    instance_number:      ID of the instance for multiprocessing, from 0 to 7.")
-        print ("    specimens_count:      How many specimens to generate on each iteration. Higher-> Better&Slower.")
-        print ("    percent_to_clone:     Percent of specimens to clone without modification to the next iteration.")
-        print ("    percent_to_select:    Percent of specimens to select from the fitests to crossover.")
-        print ("    mutation_probability: Probability of mutations.")
-        print ()
-        print ("    Example: key2finger_evolutionary.py Hummelflug.midigram -1 10 20 1 50 0.5 0.2 0.05")
-        sys.exit()
-
 try:
     # Attempts to load configuration
     from config import Config
@@ -854,6 +863,7 @@ with open(fullframes_filepath_json, 'w', encoding='utf-8') as anim_file:
 # ENCODE
 # Leave only frames with Key transitions
 # (Delete frame when equal to frame-1).
+# TODO map Reduced Frames to Full Frames
 frames_filepath_json = "reduced_frames.json"
 if os.path.exists(frames_filepath_json):
     print ("Loading Reduced Frames from file")
@@ -873,6 +883,39 @@ else:
     print ("Saving Reduced Frames to file")
     with open(frames_filepath_json, 'w', encoding='utf-8') as anim_file:
         json.dump(frames.tolist(), anim_file, sort_keys=True, indent=4, separators=(',', ': '))
+
+
+# Map Reduced Frames to Full Frames
+current_fingers_positions = [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1]
+condensed_frame_index = 0
+condensed_to_full_mapping = {}
+condensed_pressed_keys = {}
+condensed_used_fingers = {}
+for full_frame_index in range(0, len(full_frames)):
+    pressed_keys = []
+    for key_index in range(0, 88):
+        if full_frames[full_frame_index][key_index] != 0:
+            pressed_keys.append(key_index)
+    condensed_found = False
+    previous_condensed_used_fingers = []
+    while not condensed_found:
+        try:
+            frames[condensed_frame_index]
+        except:
+            #print ("Missing Condensed Frames")
+            break
+        condensed_pressed_keys[condensed_frame_index] = []
+        condensed_used_fingers[condensed_frame_index] = []
+        for key_index in range(0, 88):
+            if frames[condensed_frame_index][key_index] != 0:
+                condensed_pressed_keys[condensed_frame_index].append(key_index)
+                condensed_used_fingers[condensed_frame_index].append(frames[condensed_frame_index][key_index])
+        if pressed_keys==condensed_pressed_keys[condensed_frame_index]:
+            condensed_found = True
+            condensed_to_full_mapping[condensed_frame_index] = full_frame_index
+            previous_condensed_used_fingers = condensed_pressed_keys[condensed_frame_index]
+        else:
+            condensed_frame_index += 1
 
 # TODO
 # Smooth:
@@ -895,7 +938,7 @@ while processed_frames is None or processed_frames < frames.shape[0]:
         end_frame = start_frame + frame_steps
         if end_frame > frames.shape[0]:
             end_frame = frames.shape[0]
-    specimen, left_hand_position, right_hand_position = up_hill(sufix, frames, start_frame, end_frame, max_steps, left_hand_position, right_hand_position, specimen)
+    specimen, left_hand_position, right_hand_position = up_hill(sufix, frames, condensed_to_full_mapping, start_frame, end_frame, max_steps, left_hand_position, right_hand_position, specimen)
     #print ("Hand positions: {} {}".format(left_hand_position, right_hand_position))
     processed_frames +=  frame_steps
     #specimen_to_animation(specimen, full_frames)
