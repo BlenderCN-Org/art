@@ -688,6 +688,11 @@ conversation = [
 ]
 
 
+conversation = [
+	["rdany",   'Hi, my name is Rover <break time="100ms"/> Dany, I am a robot, and my mission is to explore the unknown.'],
+    ['rdany',   'I would like to share with you my adventures. Please, enjoy!'],
+]
+
 output = ""
 rd.seed(167)
 for line in conversation:
