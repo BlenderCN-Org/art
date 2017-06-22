@@ -33,4 +33,5 @@ print ("Full Frames: ", full_frames.shape[0])
 print ("Reduced Frames: ", reduced_frames.shape[0])
 
 
-specimen_zero = specimen(10)
+specimen_zero = specimen(full_frames, reduced_frames, condensed_frame_index, 10)
+#print (specimen_zero.get_fitness())
